@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CloudDownload
@@ -82,6 +83,12 @@ private val BuiltIn = listOf(
         "Stuck? Ask the AI helper",
         "Open any page and ask a question. The answer comes from the document you are reading.",
         drawable = R.drawable.intro_2,
+    ),
+    // The owner is choosing a picture for this one; until intro_4 is added to the app it is drawn as an icon on green.
+    IntroSlide(
+        "Be ready for every exam",
+        "Practise with exams for your class, then watch your streak and progress grow every day.",
+        icon = Icons.Outlined.Quiz,
     ),
     IntroSlide(
         "Study anywhere",

@@ -106,7 +106,7 @@ async function createSession(userId, opts = {}) {
 
 // Every request carries a token, so every request used to cost a database read. A session found is remembered for a few
 // seconds; signing out, a ban and a password reset clear it at once (forgetUser), so none of them is delayed.
-const SESSION_CACHE_MS = 5000;
+const SESSION_CACHE_MS = 30000;
 const SESSION_CACHE_MAX = 5000;
 const sessionCache = new Map(); // tokenHash -> { userId, until }
 

@@ -52,6 +52,15 @@ function makeDb() {
   return {
     data,
     collection(name) {
+      const project = (d, opts) => {
+        const spec = opts && opts.projection;
+        if (!spec) return d;
+        const out = { ...d };
+        const keys = Object.keys(spec).filter((k) => k !== '_id');
+        if (keys.length && spec[keys[0]]) { for (const k of Object.keys(out)) if (k !== '_id' && !spec[k]) delete out[k]; }
+        else for (const k of keys) delete out[k];
+        return out;
+      };
       const col = {
         async insertOne(doc) {
           const row = { ...doc };
@@ -59,8 +68,8 @@ function makeDb() {
           rows(name).push(row);
           return { insertedId: row._id };
         },
-        async findOne(filter) { return rows(name).find((d) => matches(d, filter)) || null; },
-        find(filter) {
+        async findOne(filter, opts) { const d = rows(name).find((x) => matches(x, filter)); return d ? project(d, opts) : null; },
+        find(filter, opts) {
           let list = rows(name).filter((d) => matches(d, filter));
           const cursor = {
             sort(spec) {
@@ -77,7 +86,7 @@ function makeDb() {
             },
             skip(n) { list = list.slice(n); return cursor; },
             limit(n) { list = list.slice(0, n); return cursor; },
-            async toArray() { return list; },
+            async toArray() { return list.map((d) => project(d, opts)); },
           };
           return cursor;
         },

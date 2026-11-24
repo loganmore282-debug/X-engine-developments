@@ -40,7 +40,7 @@ async function submitFeedback({ userId, type, message, noteId, appVersion, devic
   let noteTitle = null;
   const noteOid = noteId ? toId(noteId) : null;
   if (noteOid) {
-    const note = await db.collection('notes').findOne({ _id: noteOid });
+    const note = await db.collection('notes').findOne({ _id: noteOid }, { projection: { title: 1 } });
     noteTitle = note ? note.title : null;
   }
 

@@ -11,6 +11,7 @@ import { Visibility, VisibilityOff } from '../icons';
 const BUILT_IN: Slide[] = [
   { id: 'b1', title: 'Every note in one place', text: 'Notes and exams for your class, added the moment they are ready.', imageUrl: '/intro/1.jpg' },
   { id: 'b2', title: 'Stuck? Ask the AI helper', text: 'Open any page and ask a question. The answer comes from the document you are reading.', imageUrl: '/intro/2.jpg' },
+  { id: 'b4', title: 'Be ready for every exam', text: 'Practise with exams for your class, then watch your streak and progress grow every day.', imageUrl: '/intro/4.jpg' },
   { id: 'b3', title: 'Study anywhere', text: 'Read on your phone, tablet or computer, and carry on exactly where you stopped.', imageUrl: '/intro/3.jpg' },
 ];
 
@@ -39,7 +40,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
   const last = i === slides.length - 1;
   return (
     <div className="intro">
-      {slides.map((s, n) => <div key={s.id} className={`intro-slide ${n === i ? 'on' : ''}`} style={{ backgroundImage: s.imageUrl ? `url(${s.imageUrl})` : 'linear-gradient(160deg,#1f7f59,#0b2f22)' }} />)}
+      {slides.map((s, n) => <div key={s.id} className={`intro-slide ${n === i ? 'on' : ''}`} style={{ backgroundImage: s.imageUrl ? `url(${s.imageUrl}), linear-gradient(160deg,#1f7f59,#0b2f22)` : 'linear-gradient(160deg,#1f7f59,#0b2f22)' }} />)}
       <div className="intro-fade" />
       <div className="intro-top">
         <div className="intro-bars">{slides.map((s, n) => <i key={s.id} className={n < i ? 'done' : n === i ? 'on' : ''} />)}</div>

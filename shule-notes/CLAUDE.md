@@ -235,6 +235,7 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   `media.js`); `GET /onboarding` is public and says `configured` (false = the owner made none, so the app shows its own three
   built-in slides; true with none switched on = no introduction). Design is our own (full-bleed picture, story-style bars,
   one wide button), `ui/onboarding/IntroScreen.kt`. Images load with Coil.
+  The BUILT-IN introduction (used until the owner makes slides) has FOUR slides: notes, AI helper, "Be ready for every exam", study anywhere. The exam slide's picture is `web/public/intro/4.jpg` (web shows green until the file exists); on Android it is an icon on green until an `intro_4` drawable is added (then switch it to `drawable = R.drawable.intro_4`). The e2e smoke test asserts four slides.
 - **Profile photo:** the default picture is the Shule Notes logo (`ProfileAvatar` in `ui/components/Brand.kt`); a student can choose
   a photo (system photo picker, shrunk/straightened to 512px square on the phone, `AvatarImage`), stored on the server disk
   (`POST /auth/avatar`, `GET /auth/avatar` authenticated, `avatarVersion` on the user busts caches, removed with the
@@ -270,17 +271,24 @@ Students buy a TIME PASS with MTN/Airtel mobile money through MarzPay (`backend/
 - `backend/perf.js`: answers that are the same for every student (`/notes`, `/subjects`, `/config`, `/announcements` per class) are built ONCE per
   owner change (revision) and at least every 60 s, kept in memory and sent with an ETag, so a phone that has the current copy gets a **304** and the
   database is not touched; simultaneous callers share one build. `/levels` is static + ETag. `compression` middleware gzips JSON.
-- `auth.resolveSession` remembers a found session for 5 s; sign-out, ban, password reset and account removal clear it at once (`forgetUser`) -- any NEW
+- `auth.resolveSession` remembers a found session for 30 s; sign-out, ban, password reset and account removal clear it at once (`forgetUser`) -- any NEW
   code that deletes sessions must call `forgetUser`. `/notes/:id/file` uses `res.sendFile` (304s and Range resume); `?prefetch=1` or a Range request is
-  not counted as a read; `POST /notes/:id/opened` counts a read for a prefetched copy. Keep-alive 65 s (above nginx's), graceful SIGTERM, Mongo pool 40.
+  not counted as a read; `POST /notes/:id/opened` counts a read for a prefetched copy. Keep-alive 65 s (above nginx's), graceful SIGTERM, Mongo pool 60 (min 10).
   Slow requests (>1.5 s) are logged ("slow request:"). Single process on purpose: payment/login locks are in-process (do not cluster without moving them to Mongo).
   Tests: `test-perf.js`.
 - Website: the reader (pdf.js) is a lazy chunk (main bundle 609 KB -> 242 KB), preloaded when Home shows; hovering/touching a document starts its PDF download
   (`prefetch.ts`); a service worker (`public/sw.js`) keeps the site's own files (never API data) so repeat visits are instant; Home restores filters and scroll;
   keyboard in the reader (arrows/PageUp/PageDown, +/-, /, A, B, Esc); nginx gzip for text (needs `./setup-web.sh` re-run when nginx-web.conf changes).
 
+### Database speed (db.js) -- keep these
+- Writes use `writeConcern {w:1, j:false}` (confirmed from memory, MongoDB journals to disk every 100 ms; a payment lost in that instant is recovered by MarzPay's status check). Reads `local`, no compression (same machine), warm pool.
+- Lists and file requests NEVER load a note's text: `LEAN = { extractedText: 0, pageTexts: 0 }` in server.js (`/notes`, `/notes/:id`, `/file`, admin list). Only `/pages` and `/ai/ask` read the full note. `hasAiContext` falls back to `textStatus === 'ready'`; `db.js tidyOldNotes` gives old notes a `textStatus` once at start.
+  Use `find(q, { projection })` (never `.project()`; the test fake supports `projection` in find/findOne).
+- `ensureSpeedIndexes()` adds the read indexes for the admin counts/lists and the library; add an index there when adding a new query on a big collection.
+- No real MongoDB exists in the Claude sandbox, so speed gains are by design (less data, fewer waits), not measured here. `deploy/speedtest.sh` measures the live server.
+
 ### One device at a time (auth.js `createSession`, setting `singleDevice`, default ON)
-A new student sign-in marks every OLDER session of that student `replaced` (kept up to 7 days, not deleted) and clears the 5 s session memory, so the old
+A new student sign-in marks every OLDER session of that student `replaced` (kept up to 7 days, not deleted) and clears the session memory, so the old
 device gets **401 `code: signed_in_elsewhere`** on its very next request and the app/website sign out and say why ("...opened on another device").
 Only sessions OLDER (by `_id`) than the new one are marked, so two simultaneous sign-ins leave exactly one winner. Admin > Settings has the switch
 ("One device at a time"). Tests that need two live devices for one student must call `createSession(id, { single: false })`. Tests: `test-single-device.js`.

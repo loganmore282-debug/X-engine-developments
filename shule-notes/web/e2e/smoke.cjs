@@ -14,7 +14,9 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   const step = (m) => console.log('step:', m);
   step('intro'); await page.goto(BASE + '/');
   await page.waitForSelector('.intro-bottom', { timeout: 15000 }); await shot(page, '01-intro');
-  await page.click('text=Continue'); await page.click('text=Continue'); await page.click('text=Get started');
+  for (let n = 0; n < 3; n++) await page.click('text=Continue'); // the built-in introduction has four slides
+  if ((await page.locator('.intro-bars i').count()) !== 4) problems.push('the introduction should have four slides');
+  await page.click('text=Get started');
   await page.waitForSelector('text=Welcome back'); await shot(page, '02-sign-in');
   step('register'); await page.click('text=Create an account');
   await page.fill('input[autocomplete=name]', 'Amina Nakato'); await page.fill('input[inputmode=tel]', '0772123456'); await page.fill('input[type=password]', 'study2026');

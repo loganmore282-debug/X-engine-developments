@@ -12,7 +12,20 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-const client = new MongoClient(MONGODB_URI, { maxPoolSize: 40, minPoolSize: 4, maxIdleTimeMS: 60000 });
+// Speed settings (the database is on the SAME machine, so the network is not the cost, waiting on the disk is):
+//  - writeConcern w:1, j:false: a write is confirmed as soon as MongoDB has it in memory instead of waiting for the disk
+//    to confirm it (MongoDB still writes its journal to disk every 100 ms, so a crash can lose at most that last
+//    fraction of a second; the payment code re-checks with MarzPay, so no payment is lost for good).
+//  - a warm pool of connections so a busy minute never waits for a new one; no compression (same machine).
+const client = new MongoClient(MONGODB_URI, {
+  maxPoolSize: 60, minPoolSize: 10, maxIdleTimeMS: 120000,
+  writeConcern: { w: 1, j: false },
+  readConcernLevel: 'local',
+  compressors: 'none',
+  retryReads: true, retryWrites: true,
+  serverSelectionTimeoutMS: 8000, connectTimeoutMS: 8000, socketTimeoutMS: 45000,
+  appName: 'shule-notes',
+});
 let db = null;
 
 async function connect() {
@@ -22,6 +35,8 @@ async function connect() {
   // URI cannot silently land writes in Atlas's "test" database.
   db = client.db();
   await ensureIndexes();
+  await ensureSpeedIndexes();
+  await tidyOldNotes();
   console.log('MongoDB connected (' + db.databaseName + ')');
   return db;
 }
@@ -47,6 +62,31 @@ async function ensureIndexes() {
   await db.collection('adminSessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   await db.collection('auditLog').createIndex({ at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 365 });
   await db.collection('aiUsage').createIndex({ userId: 1, date: 1 }, { unique: true });
+}
+
+// Indexes that only make reads faster (the admin counts, lists and the student library). A failure here is logged, never fatal.
+async function ensureSpeedIndexes() {
+  const want = [
+    ['users', { status: 1 }], ['users', { classLevel: 1 }], ['users', { accessUntil: 1 }], ['users', { lastSeen: -1 }],
+    ['sessions', { userId: 1, _id: 1 }],
+    ['notes', { active: 1, uploadedAt: -1 }], ['notes', { views: -1 }], ['notes', { uploadedAt: -1 }],
+    ['payments', { status: 1, createdAt: -1 }], ['payments', { userId: 1, status: 1, classLevel: 1 }],
+    ['feedback', { createdAt: -1 }], ['feedback', { status: 1, createdAt: -1 }], ['feedback', { userId: 1, createdAt: -1 }],
+    ['slides', { order: 1, createdAt: 1 }],
+    ['announcements', { active: 1, createdAt: -1 }],
+    ['aiUsage', { date: 1 }],
+    ['auditLog', { at: -1 }],
+  ];
+  await Promise.all(want.map(([name, spec]) => db.collection(name).createIndex(spec).catch((e) => console.error('index on', name, 'skipped:', e.message))));
+}
+
+// Notes uploaded by older versions have no textStatus; the library list no longer loads each note's (large) text, so say it once here.
+async function tidyOldNotes() {
+  try {
+    const notes = db.collection('notes');
+    await notes.updateMany({ textStatus: { $exists: false }, extractedText: { $gt: '' } }, { $set: { textStatus: 'ready' } });
+    await notes.updateMany({ textStatus: { $exists: false } }, { $set: { textStatus: 'none' } });
+  } catch (e) { console.error('could not tidy old notes:', e.message); }
 }
 
 function getDb() {

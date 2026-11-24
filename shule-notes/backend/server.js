@@ -364,6 +364,10 @@ app.get('/subjects', requireAuth, ah(async (req, res) => {
 const NOTE_KINDS = ['notes', 'past-paper'];
 const cleanKind = (value) => (NOTE_KINDS.includes(String(value || '').trim()) ? String(value).trim() : null);
 
+// The text of a document (extractedText, pageTexts) can be megabytes. Lists and file requests never need it, so they leave it out
+// of the query: the database sends a few hundred bytes per note instead of the whole text.
+const LEAN = { extractedText: 0, pageTexts: 0 };
+
 function publicNote(n) {
   return {
     id: String(n._id), subjectId: n.subjectId ? String(n.subjectId) : null,
@@ -372,7 +376,7 @@ function publicNote(n) {
     views: n.views || 0,
     free: n.free === true,
     pageCount: n.pageCount || 0, fileSize: n.fileSize || 0, uploadedAt: n.uploadedAt,
-    hasAiContext: !!(n.extractedText && n.extractedText.length > 0),
+    hasAiContext: n.extractedText !== undefined ? !!(n.extractedText && n.extractedText.length > 0) : n.textStatus === 'ready',
   };
 }
 
@@ -390,7 +394,7 @@ app.get('/notes', requireAuth, ah(async (req, res) => {
   // A note still being read after upload (a few seconds) is not shown yet.
   const q = { active: { $ne: false }, textStatus: { $ne: 'reading' } };
   const list = async () => {
-    const rows = await getDb().collection('notes').find(q).sort({ uploadedAt: -1 }).limit(500).toArray();
+    const rows = await getDb().collection('notes').find(q, { projection: LEAN }).sort({ uploadedAt: -1 }).limit(500).toArray();
     return { status: 'success', notes: rows.map(publicNote) };
   };
   if (req.query.subjectId) {
@@ -404,7 +408,7 @@ app.get('/notes', requireAuth, ah(async (req, res) => {
 
 app.get('/notes/:id', requireAuth, async (req, res) => {
   let note;
-  try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }); }
+  try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }, { projection: LEAN }); }
   catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   res.json({ status: 'success', note: publicNote(note) });
@@ -428,7 +432,7 @@ app.get('/notes/:id/pages', requireAuth, ah(async (req, res) => {
 
 app.get('/notes/:id/file', requireAuth, async (req, res) => {
   let note;
-  try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }); }
+  try { note = await getDb().collection('notes').findOne({ _id: new ObjectId(req.params.id) }, { projection: LEAN }); }
   catch (_) { return res.status(400).json({ status: 'error', message: 'Invalid note id' }); }
   if (!note || note.active === false) return res.status(404).json({ status: 'error', message: 'Note not found' });
   if (!fs.existsSync(path.join(UPLOAD_DIR, 'notes', note.fileName))) return res.status(404).json({ status: 'error', message: 'File missing on server' });
@@ -642,7 +646,7 @@ async function warmStamps(onlyFileName) {
       const settings = await getSettings();
       if (settings.pdfStamp === false || !downloadPageUrl() && !settings.websiteUrl) break;
       const lines = stamp.footerLines(settings, downloadPageUrl());
-      const names = onlyFileName ? [onlyFileName] : (await getDb().collection('notes').find({}).project({ fileName: 1 }).toArray()).map((n) => n.fileName).filter(Boolean);
+      const names = onlyFileName ? [onlyFileName] : (await getDb().collection('notes').find({}, { projection: { fileName: 1 } }).toArray()).map((n) => n.fileName).filter(Boolean);
       for (const fileName of names) {
         await stamp.fileToSend({ uploadDir: UPLOAD_DIR, fileName, lines, enabled: true });
       }
@@ -707,8 +711,8 @@ app.post('/admin/notes/upload', upload.single('file'), async (req, res) => {
 
 app.post('/admin/notes/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const rows = await getDb().collection('notes').find({}).sort({ uploadedAt: -1 }).limit(1000).toArray();
-  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false, views: n.views || 0, textStatus: n.textStatus || (n.extractedText ? 'ready' : 'none') })) });
+  const rows = await getDb().collection('notes').find({}, { projection: LEAN }).sort({ uploadedAt: -1 }).limit(1000).toArray();
+  res.json({ status: 'success', notes: rows.map((n) => ({ ...publicNote(n), active: n.active !== false, views: n.views || 0, textStatus: n.textStatus || 'none' })) });
 });
 
 app.post('/admin/notes/update', async (req, res) => {
