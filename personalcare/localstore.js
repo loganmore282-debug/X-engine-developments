@@ -1,5 +1,5 @@
 'use strict';
-// PersonalCare's own database: it lives ON the VPS, in this process's memory, and is made durable with a journal on the VPS disk. No MongoDB.
+// The VPS's own database: it lives ON the VPS, in this process's memory, and is made durable with a journal on the VPS disk. No MongoDB.
 //
 // What it is: every collection is a Map of documents (each with a string `_id`). Every change is applied in memory at once (so reads are
 // instant) and is written to an append-only journal file that is fsync'ed before the caller's promise resolves, so a member is never told
@@ -336,6 +336,18 @@ class Collection {
     await this.store._commit();
     return { acknowledged: true, insertedId: id };
   }
+  // Many documents in ONE disk write (used by the one-time copy from MongoDB; also fine for any bulk load).
+  async insertMany(docs) {
+    let n = 0;
+    for (const doc of docs) {
+      const id = doc && doc._id;
+      if (typeof id !== 'string' || !id) throw new Error('insertMany needs a string _id on every document');
+      if (this._docs.docs.has(id)) throw new DuplicateKeyError(`E11000 duplicate key error: ${this.name} _id ${id}`);
+      this.store._put(this.name, id, toStore(doc)); n++;
+    }
+    await this.store._commit();
+    return { acknowledged: true, insertedCount: n };
+  }
   async replaceOne(filter, doc, opts = {}) {
     const cur = this._first(filter);
     if (!cur) {
@@ -510,7 +522,7 @@ class LocalStore {
           else if (r.c) { let m = tmp.get(r.c); if (!m) tmp.set(r.c, m = new Map()); m.set(r.d._id, r.d); count++; }
         });
       } catch (e) { bad = true; }
-      if (!end || bad) { this.log.warn && this.log.warn(`PersonalCare database: snapshot ${g} is incomplete, trying an older one`); continue; }
+      if (!end || bad) { this.log.warn && this.log.warn(`Local database: snapshot ${g} is incomplete, trying an older one`); continue; }
       for (const [c, m] of tmp) this._col(c).docs = m;
       this.gen = g; loaded = true; break;
     }
@@ -525,9 +537,9 @@ class LocalStore {
         replayed++;
       });
       const size = fs.statSync(jf).size;
-      if (good < size) { fs.truncateSync(jf, good); this.log.warn && this.log.warn(`PersonalCare database: cut a torn last line off the journal (${size - good} bytes)`); }
+      if (good < size) { fs.truncateSync(jf, good); this.log.warn && this.log.warn(`Local database: cut a torn last line off the journal (${size - good} bytes)`); }
       this.journalBytes = good;
-      if (replayed) this.log.log && this.log.log(`PersonalCare database: replayed ${replayed} journal change(s)`);
+      if (replayed) this.log.log && this.log.log(`Local database: replayed ${replayed} journal change(s)`);
     }
     this.fd = fs.openSync(jf, 'a');
   }
@@ -579,7 +591,7 @@ class LocalStore {
           this.journalBytes += data.length;
           for (const w of ws) w[0]();
         } catch (e) {
-          this.broken = new Error('PersonalCare database: could not write to disk (' + e.message + '). The server must be restarted after the disk problem is fixed.');
+          this.broken = new Error('Local database: could not write to disk (' + e.message + '). The server must be restarted after the disk problem is fixed.');
           this.log.error && this.log.error(this.broken.message);
           for (const w of ws) w[1](this.broken);
         }
@@ -592,7 +604,7 @@ class LocalStore {
     const fd = this.fd;
     fs.fsync(fd, er => {
       this.syncing = false;
-      if (er && !this.closed && this.fd === fd) { this.broken = new Error('PersonalCare database: could not write to disk (' + er.message + '). The server must be restarted after the disk problem is fixed.'); this.log.error && this.log.error(this.broken.message); return; }
+      if (er && !this.closed && this.fd === fd) { this.broken = new Error('Local database: could not write to disk (' + er.message + '). The server must be restarted after the disk problem is fixed.'); this.log.error && this.log.error(this.broken.message); return; }
       if (this.syncAgain && !this.closed && this.fd !== null) { this.syncAgain = false; this._syncSoon(); } else this.syncAgain = false;
     });
   }
@@ -712,7 +724,7 @@ class LocalStore {
     const nightly = () => {
       const now = new Date(), at = new Date(now); at.setHours(3, 30, 0, 0); if (at <= now) at.setDate(at.getDate() + 1);
       const t = setTimeout(async () => {
-        try { if (!this.broken) { await this.compactWhenIdle(); await this.backup(); this.log.log && this.log.log('PersonalCare database: nightly compaction and backup done'); } }
+        try { if (!this.broken) { await this.compactWhenIdle(); await this.backup(); this.log.log && this.log.log('Local database: nightly compaction and backup done'); } }
         catch (e) { this.log.error && this.log.error('Nightly backup failed: ' + e.message); }
         if (!this.closed) nightly();
       }, at - now);

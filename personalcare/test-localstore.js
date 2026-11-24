@@ -197,6 +197,15 @@ const rm = d => fs.rmSync(d, { recursive: true, force: true });
   try { LocalStore.restoreFromBackup(bad, tmp()); } catch (e) { threw = e; } ok(threw && /incomplete/.test(threw.message), 'an incomplete backup file is refused');
   rm(dir);
 
+  // ───────────────── bulk insert (the copy from MongoDB) ─────────────────
+  { const dd = tmp(); const sb = openStore({ dir: dd, log: quiet }); const c = sb.collection('bulk');
+    await c.createIndex({ n: 1 }, { unique: true });
+    const r = await c.insertMany(Array.from({ length: 5000 }, (_, i) => ({ _id: 'b' + i, n: i, when: new Date(1e12 + i) })));
+    eq(r.insertedCount, 5000, 'insertMany stores every document'); eq(await c.countDocuments({}), 5000, 'and they are all readable');
+    let dupe = null; try { await c.insertMany([{ _id: 'b1', n: 99999 }]); } catch (e) { dupe = e; } ok(dupe && /duplicate/i.test(dupe.message), 'a repeated _id is refused');
+    dupe = null; try { await c.insertMany([{ _id: 'zz', n: 7 }]); } catch (e) { dupe = e; } ok(dupe && /duplicate/i.test(dupe.message), 'a repeated unique value is refused');
+    await sb.close(); const sb2 = openStore({ dir: dd, log: quiet }); eq(await sb2.collection('bulk').countDocuments({}), 5000, 'after a restart all 5000 are still there'); eq((await sb2.collection('bulk').findOne({ _id: 'b4999' })).when.getTime(), 1e12 + 4999, 'dates survive'); await sb2.close(); rm(dd); }
+
   // ───────────────── fast sorted reads and the two durability modes ─────────────────
   { const dd = tmp(); const sa = openStore({ dir: dd, log: quiet }); const c = sa.collection('t');
     await c.createIndex({ userId: 1 });
