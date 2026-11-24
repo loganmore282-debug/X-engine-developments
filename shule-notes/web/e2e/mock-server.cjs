@@ -12,7 +12,7 @@ const { ObjectId } = require(B + '/node_modules/mongodb');
 const { app, marz } = require(B + '/server.js');
 const { saveSettings } = require(B + '/settings.js');
 (async () => {
-  const subjects = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Entrepreneurship Education', 'Christian Religious Education', 'History & Political Education', 'Agriculture'];
+  const subjects = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Entrepreneurship Education', 'Christian Religious Education', 'History & Political Education', 'Agriculture', 'Geography'];
   const subjectIds = {};
   for (const [i, name] of subjects.entries()) { const r = await db.collection('subjects').insertOne({ name, order: i }); subjectIds[name] = r.insertedId; }
   fs.mkdirSync(path.join(process.env.UPLOAD_DIR, 'notes'), { recursive: true });
@@ -39,6 +39,7 @@ const { saveSettings } = require(B + '/settings.js');
   await mk('Christian Religious Education Notes', 'Christian Religious Education', 'Senior 2', 'notes', 3);
   await mk('History Notes', 'History & Political Education', 'Senior 2', 'notes', 3);
   await mk('Agriculture Notes', 'Agriculture', 'Senior 2', 'notes', 3);
+  await mk('Geography Notes', 'Geography', 'Senior 2', 'notes', 3);
   await mk('Genetics', 'Biology', 'Senior 4', 'notes', 5);
   await db.collection('announcements').insertOne({ title: 'Mock exams start Monday', message: 'Revise the past papers in the Notes tab. Good luck!', active: true, createdAt: new Date() });
   // Payments on, with a pretend MarzPay that says "paid" a few seconds after the prompt (the real payment code runs).

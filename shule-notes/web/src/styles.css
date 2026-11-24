@@ -503,11 +503,19 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .subject-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (min-width: 640px) { .subject-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 960px) { .subject-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
-.subject-grid .subject-tile { position: relative; width: auto; min-height: 148px; padding: 14px 14px 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--s-soft) 55%, var(--surface)), var(--surface) 70%); }
+.subject-grid .subject-tile { position: relative; width: auto; min-height: 118px; padding: 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--s-soft) 55%, var(--surface)), var(--surface) 70%); }
+.subject-grid .subject-tile .s-ico { margin-bottom: 12px; }
 .subject-grid .subject-tile .s-go { position: absolute; right: 12px; top: 14px; color: var(--s-acc); opacity: 0.7; transition: transform 0.2s var(--ease); }
 .subject-grid .subject-tile:hover .s-go { transform: translateX(3px); }
 .subject-grid .subject-tile:active { transform: scale(0.98); }
-.subject-grid .subject-tile b { margin-top: auto; }
+.subject-grid .subject-tile b { margin-top: auto; min-height: 0; }
+.subject-grid .subject-tile small { margin-top: 2px; }
+/* A last card left alone on its row stretches across the empty cells and lies flat (picture left, name right): no hole in the grid. */
+.subject-grid .subject-tile.flat { display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'ico name' 'ico count'; column-gap: 14px; align-items: center; min-height: 0; }
+.subject-grid .subject-tile.flat .s-ico { grid-area: ico; margin: 0; }
+.subject-grid .subject-tile.flat b { grid-area: name; margin: 0; align-self: end; }
+.subject-grid .subject-tile.flat small { grid-area: count; align-self: start; }
+.subject-grid .subject-tile.flat .s-go { top: 50%; margin-top: -9px; }
 .subject-hero { position: relative; margin-top: 12px; padding: 14px 18px 20px; border-radius: 26px; background: linear-gradient(150deg, var(--s-soft), color-mix(in srgb, var(--s-soft) 40%, var(--surface))); border: 1px solid color-mix(in srgb, var(--s-acc) 22%, var(--line)); }
 .subject-hero .back-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px 0 10px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: 600 14px 'Poppins', sans-serif; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); cursor: pointer; }
 .subject-hero-row { display: flex; align-items: center; gap: 14px; margin-top: 14px; }

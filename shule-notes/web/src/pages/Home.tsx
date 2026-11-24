@@ -6,7 +6,7 @@ import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, ExpandMore, Search, Bell } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 import { preloadReader } from '../prefetch';
-import { useClassScope, useEveryClass } from '../scope';
+import { useClassScope, useEveryClass, useGridColumns } from '../scope';
 import { useUnread } from '../unread';
 
 type Sort = 'new' | 'views' | 'az';
@@ -27,6 +27,7 @@ export function HomePage() {
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
   const unread = useUnread();
+  const gridCols = useGridColumns();
 
   const scrollTo = useRef(saved.current.y);
   useEffect(() => { preloadReader(); }, []);
@@ -109,30 +110,35 @@ export function HomePage() {
         <><div className="section-head"><h2>Subjects</h2><span className="muted count">{subjectsInScope.length} {subjectsInScope.length === 1 ? 'subject' : 'subjects'}</span></div>
           {/* A grid (matrix), so every subject is in view without sideways scrolling; a tap opens that subject's own page. */}
           <div className="subject-grid">
-            {subjectsInScope.map((s, i) => (
-              <button key={s.id} className="subject-tile sv rise" style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, ...(subjectVars(s.name) as CSSProperties) }} onClick={() => nav(`/subject/${s.id}`)}>
+            {subjectsInScope.map((s, i) => {
+              // A last card left alone on its row stretches across the empty cells and lies flat, so the grid has no hole in it.
+              const left = subjectsInScope.length % gridCols;
+              const flat = i === subjectsInScope.length - 1 && left !== 0;
+              return (
+              <button key={s.id} className={`subject-tile sv rise ${flat ? 'flat' : ''}`} style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, ...(flat ? { gridColumn: `span ${gridCols - left + 1}` } : {}), ...(subjectVars(s.name) as CSSProperties) }} onClick={() => nav(`/subject/${s.id}`)}>
                 <span className="s-ico"><SubjectIcon name={s.name} size={30} /></span>
                 <b>{s.name}</b><small>{countIn(s.id)} {countIn(s.id) === 1 ? 'document' : 'documents'}</small>
                 <Chevron className="s-go" width={18} height={18} />
               </button>
-            ))}
+            ); })}
           </div></>
       )}
 
-      <div className="section-head">
-        <h2>{everyClass || !cls ? 'All notes' : `Notes for ${cls}`}</h2>
-        <span className="muted count">{visible.length} {visible.length === 1 ? 'document' : 'documents'}</span>
-        <select className="chip" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} style={{ height: 38 }}>
-          <option value="new">Newest</option><option value="views">Most read</option><option value="az">A to Z</option>
-        </select>
-      </div>
-      {hasBoth && <div className="chips">{(['all', 'notes', 'past-paper'] as const).map((k) => <button key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'all' ? 'All' : k === 'notes' ? 'Notes' : 'Exams'}</button>)}</div>}
-
-      {loading && notes.length === 0 ? <div className="grid">{[0, 1, 2, 3].map((i) => <NoteSkeleton key={i} />)}</div>
+      {/* The subjects above ARE the way in: a tap opens that subject's own page. So Home does not repeat every document below them.
+          Documents show here only while searching (results from every subject), or to explain why nothing is shown. */}
+      {query ? (
+        <>
+          <div className="section-head"><h2>Search results</h2><span className="muted count">{visible.length} {visible.length === 1 ? 'document' : 'documents'}</span></div>
+          {visible.length === 0
+            ? <div className="empty"><h3>Nothing matches your search</h3><p>Try other words{cls && !everyClass ? ', or search every class' : ''}.</p>
+                {cls && !everyClass && <button className="btn outline" onClick={() => setEveryClass(true)}>Search every class</button>}</div>
+            : <div className="grid">{visible.map((n, i) => <NoteCard key={n.id} note={n} index={i} showClass={everyClass || !cls} onOpen={() => nav(`/note/${n.id}`)} />)}</div>}
+        </>
+      ) : loading && notes.length === 0 ? <div className="grid">{[0, 1, 2, 3].map((i) => <NoteSkeleton key={i} />)}</div>
         : error && notes.length === 0 ? <div className="empty"><h3>We could not load your notes</h3><p>{error}</p><button className="btn" onClick={reload}>Try again</button></div>
-        : visible.length === 0 ? <div className="empty"><h3>{query ? 'Nothing matches your search' : cls && !everyClass ? `No notes for ${cls} yet` : 'No notes yet'}</h3><p>{query ? 'Try other words.' : 'New notes and exams appear here as soon as they are added.'}</p>
-            {cls && !everyClass && !query && <button className="btn outline" onClick={() => setEveryClass(true)}>Show every class</button>}</div>
-        : <div className="grid">{visible.map((n, i) => <NoteCard key={n.id} note={n} index={i} showClass={everyClass || !cls} onOpen={() => nav(`/note/${n.id}`)} />)}</div>}
+        : inClass.length === 0 ? <div className="empty"><h3>{cls && !everyClass ? `No notes for ${cls} yet` : 'No notes yet'}</h3><p>New notes and exams appear here as soon as they are added.</p>
+            {cls && !everyClass && <button className="btn outline" onClick={() => setEveryClass(true)}>Show every class</button>}</div>
+        : null}
       {everyClass && <div className="center" style={{ marginTop: 20 }}><button className="btn outline small" onClick={() => setEveryClass(false)}>Back to {cls}</button></div>}
 
       {paySheet && <PaySheet onClose={() => setPaySheet(false)} />}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth, useLibrary } from './store';
 
 // "Show notes from every class" is remembered for the session, so Home and a subject's page always agree on what is shown.
@@ -17,4 +17,16 @@ export function useClassScope(everyClass: boolean) {
   const inClass = useMemo(() => notes.filter((n) => everyClass || !cls || !n.classLevel || n.classLevel === cls || !known.has(n.classLevel)), [notes, cls, everyClass, known]);
   const subjectsInScope = useMemo(() => subjects.filter((s) => inClass.some((n) => n.subjectId === s.id)), [subjects, inClass]);
   return { cls, inClass, subjectsInScope };
+}
+
+// How many subject cards fit in a row at this screen width (the same breakpoints as the stylesheet).
+export function useGridColumns(): number {
+  const calc = () => (window.matchMedia('(min-width: 960px)').matches ? 4 : window.matchMedia('(min-width: 640px)').matches ? 3 : 2);
+  const [cols, setCols] = useState(calc);
+  useEffect(() => {
+    const onResize = () => setCols(calc());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return cols;
 }

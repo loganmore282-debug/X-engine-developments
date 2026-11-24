@@ -314,6 +314,8 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
   text (min 9.5 sp, measured with `rememberTextMeasurer`) until its longest word fits. e2e mock data (`web/e2e/mock-server.cjs`) deliberately contains long subject names and a long title: keep them.
 - Subjects are a GRID (owner: "some students fail to see other subjects", "he has to scroll down to see the PDF"): Home shows every subject as a 2-column card grid
   (3 / 4 columns wider; hidden while searching) and a tap opens the subject's OWN page: web `/subject/:id` (`src/pages/Subject.tsx`, shared class rule in `src/scope.ts`),
+  Home does NOT repeat the documents under the grid (owner: "this is repetition, remove it"): no "Notes for <class>" list, chips or sort on Home; documents appear on Home ONLY while
+  searching ("Search results") or as an empty/error state; kind chips and sort live on the subject page. Web e2e asserts there are no `.note-card` on Home.
   Android `SubjectScreen.kt` (an overlay in `MainScreen` that slides in; the phone's Back button closes it). The page has Back, a coloured header (icon, name, counts), a search that
   only looks inside the subject, Notes/Exams chips, sort, then the documents. Home no longer filters by subject (`selectedSubjectId` in LibraryViewModel is now unused by Home).
   NOTE: `ci/capture.py` (the emulator walkthrough) is out of date with the app (it still looks for the old announcement card, "Past papers" and the subject tiles) and needs a rewrite.

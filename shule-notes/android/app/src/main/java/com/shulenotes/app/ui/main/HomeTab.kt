@@ -290,32 +290,20 @@ fun HomeTab(
                                 icon = painterResource(subjectIcon(subject.name)),
                                 tint = subjectTint(subject.id, viewModel.subjects),
                                 onClick = { onOpenSubject(subject.id) },
+                                // A last card left alone on its row stretches across it and lies flat: no hole in the grid.
+                                wide = pair.size == 1,
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                         }
-                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
 
-            if (viewModel.hasBothKinds() && !viewModel.isLoading) {
-                item(key = "kinds") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        listOf<Pair<String?, String>>(null to "All", "notes" to "Notes", "past-paper" to "Exams").forEach { (kind, label) ->
-                            FilterChip(
-                                selected = viewModel.kindFilter == kind,
-                                onClick = { viewModel.selectKind(kind) },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-                }
-            }
+            // The subjects above are the way in (a tap opens that subject's page), so Home does not repeat every document below them.
+            // Documents show here only while searching, or to explain why there is nothing to show.
+            val showDocuments = searching || viewModel.isLoading || visible.isEmpty() || (viewModel.errorMessage != null && viewModel.notes.isEmpty())
 
-            item(key = "section") {
+            if (searching && !viewModel.isLoading) item(key = "section") {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -368,7 +356,7 @@ fun HomeTab(
             }
 
             val error = viewModel.errorMessage
-            when {
+            if (showDocuments) when {
                 viewModel.isLoading -> items(4) {
                     NoteCardSkeleton(Modifier.padding(horizontal = 20.dp, vertical = 5.dp))
                 }
@@ -694,22 +682,23 @@ private fun SubjectGridTile(
     tint: SubjectTint,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    wide: Boolean = false,
 ) {
     val shape = RoundedCornerShape(22.dp)
     // Two cards share the width: (screen - 2 x 20 margin - 12 gap) / 2, less the card's own padding.
-    val tileWidth = ((LocalConfiguration.current.screenWidthDp - 52) / 2).dp
+    val tileWidth = if (wide) (LocalConfiguration.current.screenWidthDp - 40).dp else ((LocalConfiguration.current.screenWidthDp - 52) / 2).dp
     val style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
     val size = com.shulenotes.app.ui.components.fitFontSize(name, style, tileWidth - 28.dp, 10f)
     Box(
         modifier = modifier
-            .heightIn(min = 132.dp)
+            .heightIn(min = if (wide) 88.dp else 132.dp)
             .clip(shape)
             .background(Brush.linearGradient(listOf(tint.container, MaterialTheme.colorScheme.surface)))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(onClick = onClick)
             .semantics { role = Role.Button },
     ) {
-        Column(modifier = Modifier.fillMaxHeight().padding(14.dp)) {
+        val picture: @Composable () -> Unit = {
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -719,8 +708,8 @@ private fun SubjectGridTile(
             ) {
                 Icon(icon, contentDescription = null, tint = tint.accent, modifier = Modifier.size(28.dp))
             }
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(10.dp))
+        }
+        val words: @Composable () -> Unit = {
             Text(
                 name,
                 style = style,
@@ -737,11 +726,25 @@ private fun SubjectGridTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (wide) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 40.dp, top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                picture()
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) { words() }
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxHeight().padding(14.dp)) {
+                picture()
+                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(10.dp))
+                words()
+            }
+        }
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = tint.accent.copy(alpha = 0.75f),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 10.dp).size(22.dp),
+            modifier = (if (wide) Modifier.align(Alignment.CenterEnd).padding(end = 10.dp) else Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 10.dp)).size(22.dp),
         )
     }
 }
