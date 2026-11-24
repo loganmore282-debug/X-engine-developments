@@ -6,6 +6,7 @@ import type { Slide } from '../types';
 import type { AppConfig } from '../types';
 import { Sheet } from '../components';
 import { API } from '../api';
+import { Words, confetti } from '../motion';
 import { Check, Visibility, VisibilityOff } from '../icons';
 import { SubjectIcon, subjectVars } from '../subjectLook';
 
@@ -52,7 +53,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
         </div>
       </div>
       <div className="intro-bottom" key={i}>
-        <h2>{slides[i].title}</h2>
+        <h2><Words text={slides[i].title} /></h2>
         <p>{slides[i].text}</p>
         <button className="btn wide" onClick={() => (last ? onDone() : setI(i + 1))}>{last ? 'Get started' : 'Continue'}</button>
       </div>
@@ -189,7 +190,7 @@ export function ChooseClass({ onDone }: { onDone?: () => void }) {
   async function go() {
     if (!picked) return;
     setBusy(true);
-    try { await setClass(picked); onDone?.(); } catch (e) { toast((e as Error).message, 'error'); } finally { setBusy(false); }
+    try { await setClass(picked); confetti(); onDone?.(); } catch (e) { toast((e as Error).message, 'error'); } finally { setBusy(false); }
   }
   return (
     <div className="auth">

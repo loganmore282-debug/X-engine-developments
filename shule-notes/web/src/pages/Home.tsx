@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useLibrary } from '../store';
 import { Cover, NoteCard, NoteSkeleton, Sheet, readRecent, pagesLabel } from '../components';
+import { CountUp } from '../motion';
 import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, ExpandMore, Search, Bell } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
@@ -89,9 +90,9 @@ export function HomePage() {
             </button>
           ) : <div className="glass"><span className="glass-label">Your library</span><span className="poppins big-line">Open any document and it will wait here, on the page where you stopped.</span></div>}
           <div className="stats">
-            <div><b>{inClass.length}</b><small>documents for you</small></div>
-            <div><b>{subjectsInScope.length}</b><small>subjects</small></div>
-            <div><b>{totalPages}</b><small>pages to read</small></div>
+            <div><b><CountUp value={inClass.length} /></b><small>documents for you</small></div>
+            <div><b><CountUp value={subjectsInScope.length} /></b><small>subjects</small></div>
+            <div><b><CountUp value={totalPages} /></b><small>pages to read</small></div>
           </div>
         </aside>
       </section>

@@ -559,3 +559,120 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .wm-layer::before { content: ''; display: block; position: sticky; top: calc(50dvh - 170px); height: min(340px, 72vw); background: url(/logo-mark.png) center / contain no-repeat; opacity: 0.06; }
 :root[data-theme='dark'] .wm-layer::before { opacity: 0.08; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .wm-layer::before { opacity: 0.08; } }
+
+/* ═══════════════════════════ MOTION LAYER ═══════════════════════════
+   Only transform and opacity move (smooth even on a cheap phone). Everything is switched off for people who asked for less
+   motion (see the last rule). The behaviour that needs script (reveal on scroll, tilt, ripple, parallax) lives in src/motion.tsx. */
+:root { --ease-out: cubic-bezier(0.22, 1, 0.36, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1); --sy: 0px; }
+
+/* Launch: the logo glides in on two soft rings that spread and fade */
+.splash { height: 100%; display: grid; place-items: center; background: radial-gradient(520px 360px at 50% 46%, color-mix(in srgb, var(--primary) 9%, #fff), #fff 70%); position: relative; overflow: hidden; }
+.splash-logo { position: relative; z-index: 1; width: min(300px, 62vw); animation: splash-in 0.8s var(--ease-spring) both; }
+.splash-ring { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--primary) 30%, transparent); animation: ring-out 1.8s var(--ease-out) infinite; }
+.splash-ring.r2 { animation-delay: 0.7s; }
+@keyframes splash-in { from { opacity: 0; transform: scale(0.82) translateY(10px); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes ring-out { from { transform: scale(0.6); opacity: 0.9; } to { transform: scale(2.6); opacity: 0; } }
+
+/* Introduction: words rise one by one, the button breathes, the photo drifts (Ken Burns) */
+.word { display: inline-block; margin-right: 0.27em; animation: word-in 0.7s var(--ease-out) both; }
+@keyframes word-in { from { opacity: 0; transform: translateY(22px) rotate(2.5deg); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+.intro-bottom p { animation-delay: 0.25s; }
+.intro-bottom .btn { animation: rise 0.6s 0.4s var(--ease-out) both, glow 2.6s 1.4s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35); } 50% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); } }
+.intro-slide { transition: opacity 0.8s var(--ease-out), transform 7s linear; }
+.intro-slide:nth-child(even).on { transform: scale(1.1) translateX(-1.5%); }
+.intro-slide:nth-child(odd).on { transform: scale(1.1) translateX(1.5%); }
+
+/* Pages: a tab switch fades and rises, a deeper page slides in from the side */
+.tab-enter { animation: tab-in 0.4s var(--ease-out) backwards; }
+@keyframes tab-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* Reveal on scroll (the script tags cards and tiles, this makes them glide in, one after another) */
+.reveal { opacity: 0; transform: translateY(20px) scale(0.985); transition: opacity 0.55s var(--ease-out), transform 0.6s var(--ease-out); transition-delay: var(--d, 0ms); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* Header: drifting shapes, a spotlight that follows the pointer, a slow parallax */
+.hero-deco i { will-change: transform; animation: drift 14s ease-in-out infinite alternate; }
+.hero-deco i:nth-child(2) { animation-duration: 18s; animation-delay: -4s; }
+.hero-deco i:nth-child(3) { animation-duration: 22s; animation-delay: -9s; }
+@keyframes drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-18px, 14px, 0) scale(1.08); } }
+.hero-deco { transform: translate3d(0, calc(var(--sy) * -0.06), 0); }
+.hero::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(260px circle at var(--mx, 80%) var(--my, 0%), rgba(255, 255, 255, 0.14), transparent 70%); opacity: 0; transition: opacity 0.4s; }
+@media (hover: hover) { .hero:hover::after { opacity: 1; } }
+.hero h1 { animation: rise 0.7s 0.1s var(--ease-out) both; }
+.hero .eyebrow { animation: rise 0.6s var(--ease-out) both; }
+.stats div { transition: transform 0.25s var(--ease-out), background 0.25s; }
+.stats div:hover { transform: translateY(-3px); background: rgba(0, 0, 0, 0.24); }
+.searchbar .input:focus { transform: translateY(-1px); }
+.searchbar { transition: transform 0.3s var(--ease-out); }
+.searchbar:focus-within { transform: translateY(-2px) scale(1.01); }
+
+/* Cards lean towards the pointer (mouse only) and a light follows it */
+@media (hover: hover) and (pointer: fine) {
+  .subject-tile, .note-card { transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.3s var(--ease-out), box-shadow 0.3s, border-color 0.2s, background 0.2s, opacity 0.55s var(--ease-out); will-change: transform; }
+  .subject-tile.tilting, .note-card.tilting { transition: transform 0.08s linear, box-shadow 0.3s, border-color 0.2s, opacity 0.55s var(--ease-out); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14); }
+  .subject-tile:hover { transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-3px); }
+  .subject-tile, .note-card { transition-delay: var(--d, 0ms); }
+  .subject-tile.reveal:not(.in), .note-card.reveal:not(.in) { transform: translateY(20px) scale(0.985); }
+  .subject-tile::before, .note-card::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.3s; background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 0%), rgba(255, 255, 255, 0.32), transparent 65%); }
+  .subject-tile.tilting::before, .note-card.tilting::before { opacity: 1; }
+}
+.note-card { position: relative; }
+.subject-tile:active, .note-card:active { transform: scale(0.97); transition-duration: 0.1s; }
+
+/* Buttons: a shine sweeps across on hover, a ripple spreads from the touch */
+.btn, .chip, .class-chip { position: relative; overflow: hidden; }
+.btn::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%); transform: translateX(-130%); }
+@media (hover: hover) { .btn:not(:disabled):hover::after { transform: translateX(130%); transition: transform 0.75s var(--ease-out); } .btn:not(:disabled):hover { transform: translateY(-1px); } }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; background: currentColor; opacity: 0.22; transform: scale(0); animation: ripple 0.6s var(--ease-out) forwards; }
+@keyframes ripple { to { transform: scale(1); opacity: 0; } }
+
+/* Bottom bar: one marker slides between the tabs, the chosen icon pops */
+@media (max-width: 760px) {
+  .bottom-nav::before { content: ''; position: absolute; top: -1px; left: 0; width: 30px; height: 3px; border-radius: 0 0 4px 4px; background: var(--primary); transform: translateX(calc(8px + (100vw - 16px) / 3 * (var(--i, 0) + 0.5) - 15px)); transition: transform 0.45s var(--ease-spring); }
+  .bottom-nav a { transition: color 0.25s, transform 0.2s var(--ease-out); }
+  .bottom-nav a:active { transform: scale(0.9); }
+}
+
+/* Sheets rise with a soft spring, the page behind blurs a little */
+.overlay { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.sheet { animation: sheet-up 0.45s var(--ease-sheet) both; }
+@keyframes sheet-up { from { transform: translateY(60px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 761px) { .sheet { animation-name: sheet-pop; } @keyframes sheet-pop { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } } }
+
+/* Messages: a toast springs in and shows how long it stays; a wrong password shakes */
+.toast { position: relative; overflow: hidden; animation: toast-in 0.5s var(--ease-spring) both; }
+.toast::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: 0.35; transform-origin: left; animation: countdown 3.2s linear forwards; }
+@keyframes countdown { to { transform: scaleX(0); } }
+.banner-error { animation: rise 0.35s var(--ease-out) both, shake 0.45s 0.1s; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+
+/* Saving a document: the bookmark pops and a ring spreads from it */
+.bookmark { position: relative; }
+.bookmark.pop::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; border: 2px solid var(--primary); pointer-events: none; animation: ring-pulse 0.6s var(--ease-out) forwards; }
+@keyframes ring-pulse { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(1.9); opacity: 0; } }
+
+/* Inputs, tiles and rows */
+.input { transition: border-color 0.2s, box-shadow 0.25s, transform 0.25s var(--ease-out); }
+.cc-disc.on { animation: pop 0.4s var(--ease-spring); }
+.cc-hello { animation: rise 0.5s var(--ease-out) both; }
+.done-tick { animation: pop 0.55s var(--ease-spring) both; }
+.bell-dot { animation: dot-pulse 1.8s ease-out infinite; }
+@keyframes dot-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 9px transparent; } }
+.meter i, .bar-track i { transition: width 0.9s var(--ease-out); }
+.reader .sheet-page { animation: page-in 0.5s var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(14px) scale(0.99); } to { opacity: 1; transform: none; } }
+.subject-hero { animation: rise 0.55s var(--ease-out) both; }
+.subject-hero .s-ico, .subject-hero-row > span:first-child { animation: pop 0.6s 0.15s var(--ease-spring) both; }
+
+/* Confetti */
+.confetti { position: fixed; inset: 0; z-index: 200; pointer-events: none; overflow: hidden; }
+.confetti i { position: absolute; width: 9px; height: 14px; border-radius: 2px; opacity: 0; animation: confetti 1.25s var(--ease-out) forwards; }
+@keyframes confetti { 0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(var(--s)); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 140px)) rotate(var(--r)) scale(var(--s)); } }
+
+/* Less motion: for people who asked their device for it, everything simply appears */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; transition-delay: 0ms !important; scroll-behavior: auto !important; }
+  .reveal { opacity: 1 !important; transform: none !important; }
+}
+.no-motion .reveal { opacity: 1; transform: none; }

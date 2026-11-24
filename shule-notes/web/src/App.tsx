@@ -6,6 +6,7 @@ import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
 import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './pages/Other';
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
+import { useMotion } from './motion';
 import { Bell, Bookmark, BookmarkFilled, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
 import { SubjectPage } from './pages/Subject';
@@ -13,13 +14,17 @@ import { useUnread } from './unread';
 import { API } from './api';
 
 function Splash() {
-  return <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: '#fff' }}><img src="/logo-full.png" alt="Shule Notes" style={{ width: 'min(300px, 62vw)', animation: 'rise .5s both' }} /></div>;
+  return <div className="splash"><span className="splash-ring" /><span className="splash-ring r2" /><img className="splash-logo" src="/logo-full.png" alt="Shule Notes" /></div>;
 }
 
 // Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
 function ReaderLoading() {
   return <div className="reader"><div className="reader-top"><div className="shimmer" style={{ width: 160, height: 18, borderRadius: 8, margin: '14px 12px' }} /></div><div className="pages"><div className="pages-in"><div className="sheet-page" style={{ width: 'min(860px, 92vw)', aspectRatio: '0.707' }}><div className="shimmer" /></div></div></div></div>;
 }
+
+// The three tabs (a tab switch fades and rises; a deeper page slides in), and which tab the sliding marker sits under.
+const TABS = ['/', '/saved', '/profile'];
+function navIndex(path: string) { return path === '/saved' ? 1 : path === '/profile' || path === '/progress' || path === '/payments' ? 2 : 0; }
 
 function Shell() {
   const nav = useNavigate();
@@ -46,13 +51,13 @@ function Shell() {
         <button className={`icon-btn bell ${unread ? 'ring' : ''}`} aria-label={unread ? 'Notifications, new message' : 'Notifications'} onClick={() => nav('/inbox')} style={{ position: 'relative' }}><Bell />{unread && <i className="bell-dot" />}</button>
         <button className="icon-btn" aria-label="Your profile" onClick={() => nav('/profile')} style={{ width: 'auto', height: 'auto', padding: 0 }}><Avatar size={38} /></button>
       </div></header>
-      <main className="main page-enter" key={location.pathname}><Outlet /></main>
+      <main className={`main ${TABS.includes(location.pathname) ? 'tab-enter' : 'page-enter'}`} key={location.pathname}><Outlet /></main>
       <footer className="app-foot"><div className="app-foot-in">
         <span className="brand small"><img src="/logo-mark.png" alt="" /><span>Shule<b>Notes</b></span></span>
         <span className="grow" />
         <a href={`${API}/download/`}>Get the Android app</a><Link to="/profile">Help and support</Link><a href={`${API}/privacy`} target="_blank" rel="noreferrer">Privacy</a><a href={`${API}/terms`} target="_blank" rel="noreferrer">Terms</a>
       </div></footer>
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" style={{ ['--i' as string]: navIndex(location.pathname) }}>
         <NavLink to="/" end className={({ isActive }) => (isActive || location.pathname.startsWith('/subject/') ? 'active' : '')}>{({ isActive }) => { const on = isActive || location.pathname.startsWith('/subject/'); return <>{on ? <HomeFilled /> : <HomeIcon />}Home</>; }}</NavLink>
         <NavLink to="/saved">{({ isActive }) => <>{isActive ? <BookmarkFilled /> : <Bookmark />}Saved</>}</NavLink>
         <NavLink to="/profile">{({ isActive }) => <>{isActive ? <UserFilled /> : <UserIcon />}Profile</>}</NavLink>
@@ -93,6 +98,7 @@ function Gate() {
 }
 
 export default function App() {
+  useMotion();
   useEffect(() => { applyTheme(remember<'system' | 'light' | 'dark'>('shule_theme', 'system')); }, []);
   return <BrowserRouter><AppProviders><Gate /></AppProviders></BrowserRouter>;
 }

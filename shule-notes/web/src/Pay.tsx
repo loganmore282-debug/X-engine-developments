@@ -1,3 +1,4 @@
+import { confetti } from './motion';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { Sheet } from './components';
@@ -141,7 +142,7 @@ export function PaySheet({ onClose, onPaid, reason, classLevel }: { onClose: () 
         <button className="btn outline small" style={{ marginTop: 18 }} onClick={onClose}>Close, I will approve later</button>
       </div>}
       {step === 'done' && <div className="center" style={{ padding: '6px 0' }}>
-        <div className="done-tick"><Check /></div>
+        <div className="done-tick" ref={(el) => { if (el && !el.dataset.fired) { el.dataset.fired = '1'; const r = el.getBoundingClientRect(); confetti(r.left + r.width / 2, r.top + r.height / 2); } }}><Check /></div>
         <p style={{ fontSize: 17, margin: '14px 0 4px' }}><b>Payment received</b></p>
         <p className="muted" style={{ margin: 0 }}>{result?.accessUntil ? `Your ${forClass ? forClass + ' ' : ''}pass lasts until ${untilLabel(new Date(result.accessUntil))}.` : 'Your pass is active.'}</p>
         <button className="btn wide" style={{ marginTop: 18 }} onClick={onClose}>Start reading</button>

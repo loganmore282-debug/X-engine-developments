@@ -457,3 +457,11 @@ notes yet it says new ones will appear). Button reads "Start with <class>". The 
 ### Notifications page watermark (owner request)
 The notifications page (web `InboxPage` `.wm-page/.wm-layer`, Android `NotificationsScreen`) has the Shule Notes mark (the normal green logo, NOT white: the owner said "no white") very faint behind the list:
 web 6% (8% dark) and stays in view while scrolling, Android 6%/7% centred (lower when the list is empty). It takes no touches.
+
+### Website motion (owner: "make the best modern, professional, amazing animations")
+`web/src/motion.tsx` (script) + the MOTION LAYER block at the end of `styles.css`. Only transform/opacity move; ALL of it switches off under `prefers-reduced-motion` (CSS rule + `useMotion` adds `html.no-motion`; the e2e check showed tiles stay visible).
+What exists: launch splash (logo springs in on spreading rings); introduction headline words rise one by one (`Words`), photo drifts, button glows; tab switches fade+rise (`.tab-enter`), deeper pages slide in (`.page-enter`);
+cards/tiles/notices glide in on scroll with a stagger (`AUTO_REVEAL` selectors are tagged by a MutationObserver, so new cards get it for free; React re-rendering a new className only makes them show, never hides them);
+mouse-only tilt + light on `.subject-tile`/`.note-card`; header shapes drift, spotlight follows the pointer, slow parallax (`--sy`); count-up numbers (`CountUp`, Home stats); ripple on buttons/chips; shine on button hover;
+sliding marker under the bottom tabs (`--i` set in `Shell` by `navIndex`); sheets spring up with a blurred backdrop; toast springs in with a countdown line; wrong-password banner shakes; bookmark ring; confetti (`confetti()`) when a class is
+chosen and when a payment succeeds. Rules: never animate layout properties, never leave a `transform` animation filling forwards on a page container (it traps `position: fixed` dialogs; use `backwards`), keep `.reveal` failure-safe.
