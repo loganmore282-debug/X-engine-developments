@@ -402,7 +402,7 @@ try {
 }
 
 // ── MONGODB ──
-const { connectMongo, db, FieldValue, pingDb } = require('./db');
+const { connectMongo, db, FieldValue, pingDb, closeDb, backupNow, usesLocalDb } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
@@ -11493,10 +11493,23 @@ function sweepEphemeralState() {
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
-if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
+if (!MONGODB_URI && !usesLocalDb()) { console.error('MONGODB_URI env var is required (this server is still on MongoDB: run deploy/migrate-to-vps-db.sh to move it to the VPS)'); process.exit(1); }
 connectMongo(MONGODB_URI)
   .then(() => {
-    app.listen(PORT, () => console.log(`Petro backend listening on :${PORT}`));
+    const httpServer = app.listen(PORT, () => console.log(`Petro backend listening on :${PORT}`));
+    // A redeploy (pm2 restart on every push) stops taking new requests, lets the ones in flight finish (up to 10 s), then closes the database cleanly and exits.
+    let _stopping = false;
+    const gracefulStop = sig => {
+      if (_stopping) return; _stopping = true;
+      console.log(sig + ': finishing the requests in flight, then stopping');
+      httpServer.close(() => closeDb().catch(() => {}).then(() => process.exit(0)));
+      if (httpServer.closeIdleConnections) httpServer.closeIdleConnections();
+      setTimeout(() => process.exit(0), 10000).unref();
+    };
+    process.on('SIGTERM', () => gracefulStop('SIGTERM'));
+    process.on('SIGINT', () => gracefulStop('SIGINT'));
+    // pm2 sendSignal SIGUSR2 <name> = take a dated backup of the VPS database now (deploy/backup-now.sh). Does nothing while on MongoDB.
+    process.on('SIGUSR2', () => { try { backupNow().then(r => console.log('Backup written: ' + r.file + ' (' + r.docs + ' documents)'), e => console.error('Backup failed:', e.message)); } catch (e) { console.error('Backup failed:', e.message); } });
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
     // Owner: "make sure there is perfect timing on maturity check, so cron
