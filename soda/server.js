@@ -110,9 +110,8 @@ const livePollLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, keyGenerator
   message: { status: 'error', message: 'Trop de requêtes. Ralentissez.' } });
 const livePollIpLimiter = rateLimit({ windowMs: 60 * 1000, max: 3600, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Trop de requêtes depuis ce réseau. Ralentissez.' } });
-// Pictures (/public/img/...) are static, cached for a year and many members share one phone-network address: they are not counted against the per-address limits.
-app.use((req, res, next) => (req.path.startsWith('/public/img/') ? next() : req.path === '/health' ? healthLimiter(req, res, next) : LIVE_POLL_ROUTES.has(req.path) ? livePollIpLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
-app.use((req, res, next) => (req.path.startsWith('/public/img/') ? next() : req.path === '/health' ? next() : LIVE_POLL_ROUTES.has(req.path) ? livePollLimiter(req, res, next) : globalLimiter(req, res, next)));
+app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : LIVE_POLL_ROUTES.has(req.path) ? livePollIpLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
+app.use((req, res, next) => (req.path === '/health' ? next() : LIVE_POLL_ROUTES.has(req.path) ? livePollLimiter(req, res, next) : globalLimiter(req, res, next)));
 
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
@@ -3679,65 +3678,11 @@ function publicProductView(p, sett) {
 //
 // The browser only revalidates an HTTP/1.1 response, which is fine here and
 // was a real trap in the harness -- see test-boot-speed.py's own note.
-// ── PICTURES AS THEIR OWN FILES (owner: "image contents take long to load") ──
-// Every admin-uploaded picture used to travel INSIDE the JSON as a base64 data: URL (33% bigger, and the whole list waited for all of
-// its pictures). Now /public/products, the banners and the picture bundle carry a short address for each picture
-// (/public/img/<fingerprint>.<ext>) and the browser fetches the pictures in parallel, one cacheable file each, kept for a year
-// (the fingerprint changes when the picture does). The bytes live in memory (200 most recent) and in /srv/soda-img so they survive a restart.
-const IMG_DIR = process.env.SODA_IMG_DIR || '/srv/soda-img';
-const IMG_ENDPOINT_RE = /^\/public\/(products|banner|announcement-image|help-banner|[a-z]+-images)\/?$/;
-const _imgMem = new Map();        // file name -> { mime, buf }
-const _imgFor = new Map();        // a data URL -> its file name (so the same picture is not hashed again on every request)
-function imgRemember(file, mime, buf) {
-  _imgMem.delete(file); _imgMem.set(file, { mime, buf });
-  while (_imgMem.size > 200) _imgMem.delete(_imgMem.keys().next().value);
-  try {
-    fs.mkdirSync(IMG_DIR, { recursive: true });
-    const fp = path.join(IMG_DIR, file);
-    if (!fs.existsSync(fp)) { const tmp = fp + '.' + process.pid + '.tmp'; fs.writeFile(tmp, buf, e => { if (e) return; fs.rename(tmp, fp, () => {}); }); }
-  } catch (_) { /* memory only: still served, just not kept across a restart */ }
-}
-function externalizeOne(v, req) {
-  let file = _imgFor.get(v);
-  if (!file) {
-    const i = v.indexOf(';base64,'); const m = /^data:image\/(png|jpe?g|webp|gif)$/.exec(i > 0 ? v.slice(0, i) : '');
-    if (!m) return v;
-    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
-    const buf = Buffer.from(v.slice(i + 8), 'base64');
-    if (!buf.length) return v;
-    file = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 24) + '.' + ext;
-    imgRemember(file, { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[ext], buf);
-    if (_imgFor.size > 300) _imgFor.clear();
-    _imgFor.set(v, file);
-  }
-  return '/k7x2/public/img/' + file;
-}
-function externalizeImages(v, req) {
-  if (typeof v === 'string') return (v.length >= 3000 && v.startsWith('data:image/')) ? externalizeOne(v, req) : v;
-  if (Array.isArray(v)) return v.map(x => externalizeImages(x, req));
-  if (v && typeof v === 'object' && !(v instanceof Date)) { const o = {}; for (const k of Object.keys(v)) o[k] = externalizeImages(v[k], req); return o; }
-  return v;
-}
-app.get('/public/img/:file', (req, res) => {
-  const f = String(req.params.file || '');
-  const m = /^[a-f0-9]{24}\.(png|jpg|webp|gif)$/.exec(f);
-  if (!m) return res.status(404).end();
-  let e = _imgMem.get(f);
-  if (!e) {
-    try { e = { mime: { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[m[1]], buf: fs.readFileSync(path.join(IMG_DIR, f)) }; imgRemember(f, e.mime, e.buf); }
-    catch (_) { return res.status(404).end(); }
-  }
-  const tag = '"' + f.slice(0, 24) + '"';
-  res.set({ 'Content-Type': e.mime, 'Cache-Control': 'public, max-age=31536000, immutable', ETag: tag, 'Content-Length': String(e.buf.length), 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' });
-  if (String(req.headers['if-none-match'] || '').includes(tag)) return res.status(304).end();
-  res.end(e.buf);
-});
-
 function publicJson(req, res, body, cacheControl, prebuilt) {
   let raw, etag;
   if (prebuilt) { raw = prebuilt.raw; etag = prebuilt.etag; }
   else {
-    try { raw = JSON.stringify(IMG_ENDPOINT_RE.test(req.path || '') ? externalizeImages(body, req) : body); } catch (_) { return res.json(body); }
+    try { raw = JSON.stringify(body); } catch (_) { return res.json(body); }
     etag = 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"';
   }
   res.set('Cache-Control', cacheControl || 'no-cache');
@@ -3766,7 +3711,7 @@ app.get('/public/products', async (req, res) => {
     const states = products.map(p => { const st = productOpenState(p, Date.now()); return (st.open ? 1 : 0) + ':' + (st.mode || ''); }).join(',');
     const key = _productsCacheTs + '|' + _settingsCacheTs + '|' + states;
     if (!_publicProductsBuilt || _publicProductsBuilt.key !== key) {
-      const raw = JSON.stringify(externalizeImages({ status: 'success', products: products.map(p => publicProductView(p, sett)) }, req));
+      const raw = JSON.stringify({ status: 'success', products: products.map(p => publicProductView(p, sett)) });
       _publicProductsBuilt = { key, raw, etag: 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"' };
     }
     publicJson(req, res, null, null, _publicProductsBuilt);
