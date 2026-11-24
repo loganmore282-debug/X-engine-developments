@@ -552,3 +552,10 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .cc-subjects { display: flex; flex-wrap: wrap; gap: 8px; }
 .cc-sub { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: var(--s-soft); color: var(--s-acc); }
 .cc-more { height: 40px; padding: 0 12px; border-radius: 13px; display: grid; place-items: center; background: var(--line); color: var(--muted); font-weight: 600; font-size: 13px; }
+
+/* The notifications page: the Shule Notes mark, very faint, stays in view behind the list while it scrolls (it takes no touches). */
+.wm-page { position: relative; min-height: calc(100dvh - 160px); }
+.wm-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.wm-layer::before { content: ''; display: block; position: sticky; top: calc(50dvh - 170px); height: min(340px, 72vw); background: url(/logo-mark.png) center / contain no-repeat; opacity: 0.06; }
+:root[data-theme='dark'] .wm-layer::before { opacity: 0.08; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .wm-layer::before { opacity: 0.08; } }

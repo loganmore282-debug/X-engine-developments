@@ -2,6 +2,9 @@ package com.shulenotes.app.ui.main
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import com.shulenotes.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,48 +67,58 @@ fun NotificationsScreen(items: List<Announcement>, seenAtOnOpen: Long, onBack: (
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                    .statusBarsPadding(),
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Text("Notifications", style = MaterialTheme.typography.titleLarge)
-        }
-
-        if (items.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                StateMessage(
-                    icon = Icons.Outlined.NotificationsNone,
-                    title = "You're all caught up",
-                    body = "News from Shule Notes and alerts about your account will appear here.",
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                items(items, key = { (if (it.isSecurity) "s" else "a") + it.id }) { item ->
-                    val at = parseIsoMillis(item.createdAt)
-                    NotificationCard(
-                        item = item,
-                        whenText = timeAgo(at),
-                        isNew = !item.own && at > seenAtOnOpen,
-                        onNotMe = { showHelp = true },
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Text("Notifications", style = MaterialTheme.typography.titleLarge)
+            }
+
+            if (items.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    StateMessage(
+                        icon = Icons.Outlined.NotificationsNone,
+                        title = "You're all caught up",
+                        body = "News from Shule Notes and alerts about your account will appear here.",
+                        modifier = Modifier.align(Alignment.Center),
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(items, key = { (if (it.isSecurity) "s" else "a") + it.id }) { item ->
+                        val at = parseIsoMillis(item.createdAt)
+                        NotificationCard(
+                            item = item,
+                            whenText = timeAgo(at),
+                            isNew = !item.own && at > seenAtOnOpen,
+                            onNotMe = { showHelp = true },
+                        )
+                    }
                 }
             }
         }
+        // The Shule Notes mark, very faint, behind everything (it takes no touches, so nothing underneath is affected).
+        Image(
+            painter = painterResource(R.drawable.logo_mark),
+            contentDescription = null,
+            alpha = if (dark) 0.07f else 0.06f,
+            modifier = (if (items.isEmpty()) Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp) else Modifier.align(Alignment.Center))
+                .size(300.dp),
+        )
     }
 }
 

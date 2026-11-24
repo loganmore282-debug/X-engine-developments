@@ -27,7 +27,8 @@ export function InboxPage() {
   // The owner's news and the student's own sign-in alerts, newest first.
   const items = [...announcements, ...(notices || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return (
-    <div>
+    <div className="wm-page">
+      <div className="wm-layer" aria-hidden="true" />
       <div className="section-head" style={{ marginTop: 24 }}><button className="icon-btn" aria-label="Back" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/'))}><Back /></button><h2>Notifications</h2></div>
       {items.length === 0 ? <div className="empty"><h3>You are all caught up</h3><p>News from Shule Notes and alerts about your account appear here.</p></div>
         : items.map((a, i) => {

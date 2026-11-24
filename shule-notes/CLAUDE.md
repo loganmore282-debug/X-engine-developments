@@ -453,3 +453,7 @@ Android release signing keys live only with the owner, never in this repo.
 First-run screen (web `ChooseClass` in `pages/Auth.tsx`, Android `ChooseClassScreen` in `ui/main/ClassPicker.kt`): "Welcome, <first name>", level tabs (Primary / O-Level / A-Level with their ranges), big class tiles
 (4 per row, ALL the same size, a short last row leaves empty cells), and a live preview card for the chosen class built from the REAL library (documents, exams, subjects, subject icons; nothing invented; with no
 notes yet it says new ones will appear). Button reads "Start with <class>". The bottom-sheet picker on Home (`ClassPickerSheet`, `LevelGroups`) is unchanged. Built-in introduction order: notes, AI helper, study anywhere, exams (last).
+
+### Notifications page watermark (owner request)
+The notifications page (web `InboxPage` `.wm-page/.wm-layer`, Android `NotificationsScreen`) has the Shule Notes mark (the normal green logo, NOT white: the owner said "no white") very faint behind the list:
+web 6% (8% dark) and stays in view while scrolling, Android 6%/7% centred (lower when the list is empty). It takes no touches.
