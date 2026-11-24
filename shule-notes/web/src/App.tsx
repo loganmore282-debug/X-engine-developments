@@ -7,14 +7,21 @@ import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './pages/Other';
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 import { useMotion } from './motion';
+import { LogoBuild } from './LogoBuild';
 import { Bell, Bookmark, BookmarkFilled, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
 import { SubjectPage } from './pages/Subject';
 import { useUnread } from './unread';
 import { API } from './api';
 
+// The building logo is shown in full once per visit (tab); a reload or later screens skip straight to the finished logo.
+let SPLASH_SEEN = false;
+try { SPLASH_SEEN = sessionStorage.getItem('shule_splash') === '1'; sessionStorage.setItem('shule_splash', '1'); } catch { /* private mode: just play it */ }
+const SPLASH_MS = SPLASH_SEEN ? 700 : 3500;
+
 function Splash() {
-  return <div className="splash"><span className="splash-ring" /><span className="splash-ring r2" /><img className="splash-logo" src="/logo-full.png" alt="Shule Notes" /></div>;
+  // First open of this visit: the logo builds itself. Later in the same visit it is simply there.
+  return <div className="splash"><LogoBuild instant={SPLASH_SEEN} /></div>;
 }
 
 // Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
@@ -73,7 +80,7 @@ function Gate() {
   const [splash, setSplash] = useState(true);
   // After signing out, the sign-in screen comes back (not the create-account one the student used before).
   useEffect(() => { if (!user) setMode('in'); }, [user]);
-  useEffect(() => { const t = window.setTimeout(() => setSplash(false), 900); return () => window.clearTimeout(t); }, []);
+  useEffect(() => { const t = window.setTimeout(() => setSplash(false), SPLASH_MS); return () => window.clearTimeout(t); }, []);
   if (!ready || splash) return <Splash />;
   if (!user) {
     if (!seenIntro) return <Intro onDone={() => { localStorage.setItem('shule_intro_seen', '1'); setSeenIntro(true); }} />;

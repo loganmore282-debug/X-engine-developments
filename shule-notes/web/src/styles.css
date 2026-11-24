@@ -676,3 +676,41 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
   .reveal { opacity: 1 !important; transform: none !important; }
 }
 .no-motion .reveal { opacity: 1; transform: none; }
+
+/* ── The launch animation: the logo builds itself (see src/LogoBuild.tsx for the story, in the owner's order) ── */
+.lb { width: min(360px, 78vw); height: auto; overflow: visible; display: block; }
+.lb * { transform-box: view-box; }
+.lb-floor { opacity: 0; animation: lb-fade 0.6s 0.4s ease-out both; }
+.lb-outline { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lb-draw 0.95s 0s cubic-bezier(0.65, 0, 0.35, 1) both; }
+.lb-body { transform-origin: 486px 648px; animation: lb-fill 0.55s 0.4s var(--ease-out) both; }
+.lb-ring { animation: lb-ring 0.55s var(--ease-out) both; }
+.lb-ring0 { animation-delay: 0.7s; } .lb-ring1 { animation-delay: 0.8s; } .lb-ring2 { animation-delay: 0.9s; }
+.lb-curl { transform-origin: 695px 648px; animation: lb-peel 0.7s 0.95s var(--ease-out) both; }
+.lb-mono { transform-origin: 480px 420px; animation: lb-pulse 0.45s 1.75s ease-in-out both; }
+.lb-s { clip-path: inset(0 0 0 0); animation: lb-s 0.8s 0.8s var(--ease-out) both; }
+.lb-n { animation: lb-n 0.65s 1.1s var(--ease-out) both; }
+.lb-line { animation: lb-wipe 0.42s var(--ease-out) both; }
+.lb-line1 { animation-delay: 1.45s; } .lb-line2 { animation-delay: 1.55s; }
+.lb-cap { transform-origin: 530px 100px; animation: lb-drop 0.95s 1.5s cubic-bezier(0.3, 0.7, 0.4, 1) both; }
+.lb-stripe { animation: lb-wipe 0.4s 2.2s var(--ease-out) both; }
+.lb-tassel { transform-origin: 712px 136px; animation: lb-swing 1.3s 2.05s ease-out both; }
+.lb-letter { animation: lb-letter 0.62s calc(1.7s + var(--i, 0) * 0.055s) var(--ease-out) both; }
+.lb-shine { animation: lb-sweep 0.9s 2.5s ease-in-out both; opacity: 0; }
+@keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lb-draw { 0% { stroke-dashoffset: 1; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes lb-fill { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes lb-ring { 0% { opacity: 0; transform: translateX(46px); } 60% { opacity: 1; transform: translateX(-8px); } 100% { opacity: 1; transform: none; } }
+@keyframes lb-peel { 0% { opacity: 0; transform: rotate(40deg) scale(0.1); } 55% { opacity: 1; transform: rotate(-7deg) scale(1.07); } 100% { opacity: 1; transform: none; } }
+@keyframes lb-s { 0% { opacity: 0; clip-path: inset(0 0 100% 0); transform: translate(-26px, -18px); } 12% { opacity: 1; } 100% { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } }
+@keyframes lb-n { 0% { opacity: 0; transform: translateY(60px); } 65% { opacity: 1; transform: translateY(-7px); } 100% { opacity: 1; transform: none; } }
+@keyframes lb-pulse { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.04); } }
+@keyframes lb-wipe { from { opacity: 0; clip-path: inset(0 100% 0 0); } 10% { opacity: 1; } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+@keyframes lb-drop { 0% { opacity: 0; transform: translateY(-230px) rotate(-14deg); } 15% { opacity: 1; } 56% { transform: translateY(11px) rotate(3deg); } 74% { transform: translateY(-5px) rotate(-1deg); } 100% { opacity: 1; transform: none; } }
+@keyframes lb-swing { 0% { transform: rotate(-24deg); } 22% { transform: rotate(17deg); } 46% { transform: rotate(-10deg); } 70% { transform: rotate(4deg); } 100% { transform: none; } }
+@keyframes lb-letter { from { opacity: 0; transform: translateY(46px); filter: blur(7px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes lb-sweep { 0% { opacity: 0; transform: translateX(0); } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(880px); } }
+/* already seen this visit: show the finished logo at once */
+.lb-done *, .lb-done { animation: none !important; }
+.lb-done .lb-outline, .lb-done .lb-shine { display: none; }
+.lb-done .lb-floor { opacity: 1; }
+.splash .lb { animation: none; }
