@@ -84,14 +84,14 @@ private val BuiltIn = listOf(
         drawable = R.drawable.intro_2,
     ),
     IntroSlide(
-        "Be ready for every exam",
-        "Practise with exams for your class, then watch your streak and progress grow every day.",
-        drawable = R.drawable.intro_4,
-    ),
-    IntroSlide(
         "Study anywhere",
         "Download notes to read without data, and carry on exactly where you stopped.",
         drawable = R.drawable.intro_3,
+    ),
+    IntroSlide(
+        "Be ready for every exam",
+        "Practise with exams for your class, then watch your streak and progress grow every day.",
+        drawable = R.drawable.intro_4,
     ),
 )
 

@@ -22,7 +22,9 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   await page.fill('input[autocomplete=name]', 'Amina Nakato'); await page.fill('input[inputmode=tel]', '0772123456'); await page.fill('input[type=password]', 'study2026');
   await page.click('button:has-text("Create account")');
   await page.waitForSelector('text=Which class are you in?'); await shot(page, '03-choose-class');
-  await page.click('button.chip:has-text("Senior 2")'); await page.click('button:has-text("Continue")');
+  await page.click('.cc-tabs button:has-text("O-Level")'); await page.click('.cc-disc:has-text("Senior 2")');
+  await page.waitForSelector('.cc-preview .cc-sub'); // the preview shows the real subjects of that class
+  await shot(page, '03b-class-preview'); await page.click('button:has-text("Start with Senior 2")');
   await page.waitForSelector('.subject-tile'); await shot(page, '04-home');
   // Home does NOT repeat every document under the subject grid (the subjects are the way in); documents show only while searching.
   if ((await page.locator('.note-card').count()) > 0) problems.push('Home repeats the documents under the subject grid');

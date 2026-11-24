@@ -148,14 +148,7 @@ fun HomeTab(
     // Recent searches: remembered once the student has stopped typing, offered when the search box is tapped.
     var searchFocused by remember { mutableStateOf(false) }
     val recents by ShuleApp.session.recentSearches.collectAsState(initial = emptyList())
-    // A new message from the owner floats in once (like every other message in the app) and then waits in the bell.
-    val newNotice = viewModel.announcement
-    LaunchedEffect(newNotice?.id) {
-        if (newNotice != null) {
-            com.shulenotes.app.ui.components.Notifier.info(listOf(newNotice.title, newNotice.message).filter { it.isNotBlank() }.joinToString(": "))
-            viewModel.dismissAnnouncement()
-        }
-    }
+    // A new message from the owner waits behind the bell (red dot); it is never shown on top of the page.
     LaunchedEffect(viewModel.query) {
         delay(1500)
         ShuleApp.session.addRecentSearch(viewModel.query)

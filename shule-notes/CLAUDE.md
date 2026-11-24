@@ -387,8 +387,7 @@ when the owner changed anything. The PDF the server sends already carries the fo
   `WEB_DOMAIN` into `/etc/shule-notes/deploy.conf`), then `webhook/setup-webhook.sh` again (installs the updated build/apply
   scripts, keeps the secret). After that every push that changes `shule-notes/web` is built on the VPS (`npm ci --ignore-scripts`,
   type check, `vite build`) and swapped into `/var/www/shule-web`. nginx sends a strict CSP (`deploy/nginx-web.conf`).
-- Messages from the owner never sit inside a page: on the website a new announcement slides in as a toast from the top once (`AnnouncementToast` in App.tsx, seen id
-  in localStorage `shule_toasted`) and waits behind the bell (red dot until the inbox is opened, `shule_inbox_seen`); on Android Home calls `Notifier.info` once, then dismisses.
+- Messages from the owner NEVER pop up or sit inside a page (owner, twice: "stop it"): a new announcement only lights the red dot on the bell and is read in the inbox. No toast/Notifier for announcements, web or Android; `Notifier`/toast stay only for the student's own actions and errors ("Added to Saved", wrong password).
 - Website Profile matches the app: My pass, My class, My progress (`/progress`, `study.ts` records pages read on this browser, 1.5 s rest = read), Appearance,
   Notifications, Help, Feedback, Share (Web Share / copy link), Terms, Privacy, Get the Android app. Icons are the official Material set in `src/icons.tsx`
   (single path each, filled variants for active nav/bookmarks): add new ones the same way, never hand-draw strokes. Favicon/PWA icons are generated from `logo-mark.png`.
@@ -449,3 +448,8 @@ Android release signing keys live only with the owner, never in this repo.
 - Admin notes list is not paged (fine for one school's worth of notes).
 - Backend tests use an in-memory Mongo fake (`fake-mongo.testlib.js`) for admin features;
   it covers only the query operators the code uses -- extend it if a new one is needed.
+
+### Choosing a class when creating an account (owner: "do something better")
+First-run screen (web `ChooseClass` in `pages/Auth.tsx`, Android `ChooseClassScreen` in `ui/main/ClassPicker.kt`): "Welcome, <first name>", level tabs (Primary / O-Level / A-Level with their ranges), big class tiles
+(4 per row, ALL the same size, a short last row leaves empty cells), and a live preview card for the chosen class built from the REAL library (documents, exams, subjects, subject icons; nothing invented; with no
+notes yet it says new ones will appear). Button reads "Start with <class>". The bottom-sheet picker on Home (`ClassPickerSheet`, `LevelGroups`) is unchanged. Built-in introduction order: notes, AI helper, study anywhere, exams (last).

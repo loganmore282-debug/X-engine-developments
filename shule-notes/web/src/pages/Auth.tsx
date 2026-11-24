@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth, useLibrary, useToast } from '../store';
@@ -6,13 +6,14 @@ import type { Slide } from '../types';
 import type { AppConfig } from '../types';
 import { Sheet } from '../components';
 import { API } from '../api';
-import { Visibility, VisibilityOff } from '../icons';
+import { Check, Visibility, VisibilityOff } from '../icons';
+import { SubjectIcon, subjectVars } from '../subjectLook';
 
 const BUILT_IN: Slide[] = [
   { id: 'b1', title: 'Every note in one place', text: 'Notes and exams for your class, added the moment they are ready.', imageUrl: '/intro/1.jpg' },
   { id: 'b2', title: 'Stuck? Ask the AI helper', text: 'Open any page and ask a question. The answer comes from the document you are reading.', imageUrl: '/intro/2.jpg' },
-  { id: 'b4', title: 'Be ready for every exam', text: 'Practise with exams for your class, then watch your streak and progress grow every day.', imageUrl: '/intro/4.jpg' },
   { id: 'b3', title: 'Study anywhere', text: 'Read on your phone, tablet or computer, and carry on exactly where you stopped.', imageUrl: '/intro/3.jpg' },
+  { id: 'b4', title: 'Be ready for every exam', text: 'Practise with exams for your class, then watch your streak and progress grow every day.', imageUrl: '/intro/4.jpg' },
 ];
 
 // Shown once, before the first sign-in. The owner's slides come from the server (made in the admin panel);
@@ -163,15 +164,28 @@ export function SignUp({ onSignIn }: { onSignIn: () => void }) {
   );
 }
 
-// After the first sign-in: pick the class, so Home shows the right notes.
+// After the first sign-in: pick the class, so Home shows the right notes. One level at a time (Primary / O-Level / A-Level),
+// big class tiles, and a live preview of what that class will get (real counts from the library, never invented).
 export function ChooseClass({ onDone }: { onDone?: () => void }) {
   const { setClass, user } = useAuth();
-  const { levels } = useLibrary();
+  const { levels, notes, subjects } = useLibrary();
   const { toast } = useToast();
   const [groups, setGroups] = useState(levels);
   const [picked, setPicked] = useState(user?.classLevel || '');
   const [busy, setBusy] = useState(false);
+  const [gi, setGi] = useState(0);
   useEffect(() => { if (!groups.length) api<{ groups: typeof groups }>('/levels', { auth: false }).then((r) => setGroups(r.groups)).catch(() => {}); }, [groups.length]);
+  // Open on the level of the class already chosen (changing class later), else on the first level.
+  useEffect(() => { const at = groups.findIndex((g) => g.levels.some((l) => l.id === picked)); if (at >= 0) setGi(at); }, [groups.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const known = useMemo(() => new Set(groups.flatMap((g) => g.levels.map((l) => l.id))), [groups]);
+  const summary = useMemo(() => {
+    if (!picked) return null;
+    const list = notes.filter((n) => !n.classLevel || n.classLevel === picked || !known.has(n.classLevel));
+    const subs = subjects.filter((s) => list.some((n) => n.subjectId === s.id));
+    return { docs: list.length, exams: list.filter((n) => n.kind === 'past-paper').length, subs };
+  }, [picked, notes, subjects, known]);
+  const first = (user?.name || '').trim().split(/\s+/)[0];
+  const group = groups[Math.min(gi, Math.max(groups.length - 1, 0))];
   async function go() {
     if (!picked) return;
     setBusy(true);
@@ -179,10 +193,42 @@ export function ChooseClass({ onDone }: { onDone?: () => void }) {
   }
   return (
     <div className="auth">
-      <div className="card auth-card" style={{ maxWidth: 560 }}>
-        <h1>Which class are you in?</h1><p className="sub">We will show the notes and exams for your class.</p>
-        {groups.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${picked === l.id ? 'on' : ''}`} onClick={() => setPicked(l.id)}>{l.name}</button>)}</div></div>)}
-        <button className="btn wide" style={{ marginTop: 22 }} disabled={!picked || busy} onClick={go}>{busy ? 'Saving…' : 'Continue'}</button>
+      <div className="card auth-card cc-card">
+        {first && <div className="cc-hello">Welcome, {first}</div>}
+        <h1>Which class are you in?</h1>
+        <p className="sub">We will show the notes and exams for your class. You can change it any time.</p>
+        {groups.length > 0 && (
+          <div className="cc-tabs" role="tablist" style={{ ['--n' as string]: groups.length, ['--i' as string]: gi }}>
+            <i className="cc-thumb" />
+            {groups.map((g, n) => (
+              <button key={g.id} role="tab" aria-selected={n === gi} className={n === gi ? 'on' : ''} onClick={() => setGi(n)}>
+                <b>{g.name}</b><small>{g.levels.length > 1 ? `${g.levels[0].short} – ${g.levels[g.levels.length - 1].short}` : g.levels[0]?.short}</small>
+              </button>
+            ))}
+          </div>
+        )}
+        {group && (
+          <div className="cc-grid" key={group.id}>
+            {group.levels.map((l, n) => (
+              <button key={l.id} className={`cc-disc ${picked === l.id ? 'on' : ''}`} style={{ animationDelay: `${n * 35}ms` }} aria-pressed={picked === l.id} onClick={() => setPicked(l.id)}>
+                <b>{l.short}</b><small>{l.name}</small>
+                {picked === l.id && <span className="cc-tick"><Check width={14} height={14} /></span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="cc-preview" key={picked || 'none'} aria-live="polite">
+          {!picked ? <p className="muted">Pick your class to see what is waiting for you.</p> : summary && summary.docs > 0 ? (
+            <>
+              <div className="cc-preview-top"><b>{picked}</b><span>{summary.docs} {summary.docs === 1 ? 'document' : 'documents'}{summary.exams ? ` · ${summary.exams} ${summary.exams === 1 ? 'exam' : 'exams'}` : ''} · {summary.subs.length} {summary.subs.length === 1 ? 'subject' : 'subjects'}</span></div>
+              <div className="cc-subjects">
+                {summary.subs.slice(0, 5).map((s) => <span key={s.id} className="cc-sub sv" style={subjectVars(s.name) as CSSProperties} title={s.name}><SubjectIcon name={s.name} size={24} /></span>)}
+                {summary.subs.length > 5 && <span className="cc-more">+{summary.subs.length - 5}</span>}
+              </div>
+            </>
+          ) : <div className="cc-preview-top"><b>{picked}</b><span>New notes and exams for this class appear here the moment they are added.</span></div>}
+        </div>
+        <button className="btn wide" style={{ marginTop: 18 }} disabled={!picked || busy} onClick={go}>{busy ? 'Saving…' : picked ? `Start with ${picked}` : 'Choose your class'}</button>
       </div>
     </div>
   );

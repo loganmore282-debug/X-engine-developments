@@ -6,7 +6,7 @@ import { ChooseClass, Intro, SignIn, SignUp } from './pages/Auth';
 import { HomePage } from './pages/Home';
 import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './pages/Other';
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
-import { Bell, Bookmark, BookmarkFilled, Close, Campaign, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
+import { Bell, Bookmark, BookmarkFilled, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
 import { SubjectPage } from './pages/Subject';
 import { useUnread } from './unread';
@@ -19,34 +19,6 @@ function Splash() {
 // Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
 function ReaderLoading() {
   return <div className="reader"><div className="reader-top"><div className="shimmer" style={{ width: 160, height: 18, borderRadius: 8, margin: '14px 12px' }} /></div><div className="pages"><div className="pages-in"><div className="sheet-page" style={{ width: 'min(860px, 92vw)', aspectRatio: '0.707' }}><div className="shimmer" /></div></div></div></div>;
-}
-
-// A new message from the owner slides in from the top for a few seconds (like a phone notification), then it waits in the bell.
-// It is never placed inside the page itself.
-function AnnouncementToast() {
-  const { announcements } = useLibrary();
-  const nav = useNavigate();
-  const [shown, setShown] = useState<string | null>(null);
-  const latest = announcements[0];
-  useEffect(() => {
-    if (!latest) return;
-    const seen = localStorage.getItem('shule_toasted') || '';
-    if (seen === latest.id) return;
-    localStorage.setItem('shule_toasted', latest.id);
-    setShown(latest.id);
-    const t = window.setTimeout(() => setShown(null), 8000);
-    return () => window.clearTimeout(t);
-  }, [latest?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!latest || shown !== latest.id) return null;
-  return (
-    <div className="ann-toast-wrap">
-      <div className="ann-toast" role="status" onClick={() => { setShown(null); nav('/inbox'); }}>
-        <span className="ann-ico"><Campaign /></span>
-        <span className="grow"><b>{latest.title}</b><small>{latest.message}</small></span>
-        <button className="icon-btn" aria-label="Dismiss" onClick={(e) => { e.stopPropagation(); setShown(null); }}><Close /></button>
-      </div>
-    </div>
-  );
 }
 
 function Shell() {
@@ -85,7 +57,6 @@ function Shell() {
         <NavLink to="/saved">{({ isActive }) => <>{isActive ? <BookmarkFilled /> : <Bookmark />}Saved</>}</NavLink>
         <NavLink to="/profile">{({ isActive }) => <>{isActive ? <UserFilled /> : <UserIcon />}Profile</>}</NavLink>
       </nav>
-      <AnnouncementToast />
     </div>
   );
 }
