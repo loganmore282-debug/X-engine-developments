@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -279,7 +278,6 @@ fun HomeTab(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
                             .padding(horizontal = 20.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -290,11 +288,11 @@ fun HomeTab(
                                 icon = painterResource(subjectIcon(subject.name)),
                                 tint = subjectTint(subject.id, viewModel.subjects),
                                 onClick = { onOpenSubject(subject.id) },
-                                // A last card left alone on its row stretches across it and lies flat: no hole in the grid.
-                                wide = pair.size == 1,
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                modifier = Modifier.weight(1f),
                             )
                         }
+                        // A last card on its own row keeps the SAME size as every other card (never stretched to fill the gap).
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -682,16 +680,16 @@ private fun SubjectGridTile(
     tint: SubjectTint,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    wide: Boolean = false,
 ) {
     val shape = RoundedCornerShape(22.dp)
     // Two cards share the width: (screen - 2 x 20 margin - 12 gap) / 2, less the card's own padding.
-    val tileWidth = if (wide) (LocalConfiguration.current.screenWidthDp - 40).dp else ((LocalConfiguration.current.screenWidthDp - 52) / 2).dp
+    val tileWidth = ((LocalConfiguration.current.screenWidthDp - 52) / 2).dp
     val style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
     val size = com.shulenotes.app.ui.components.fitFontSize(name, style, tileWidth - 28.dp, 10f)
     Box(
         modifier = modifier
-            .heightIn(min = if (wide) 88.dp else 132.dp)
+            // ONE fixed size for every card (room for a 3-line name), so rows and cards always line up.
+            .height(156.dp)
             .clip(shape)
             .background(Brush.linearGradient(listOf(tint.container, MaterialTheme.colorScheme.surface)))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
@@ -726,25 +724,17 @@ private fun SubjectGridTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (wide) {
-            Row(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 40.dp, top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                picture()
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) { words() }
-            }
-        } else {
-            Column(modifier = Modifier.fillMaxHeight().padding(14.dp)) {
-                picture()
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.height(10.dp))
-                words()
-            }
+        Column(modifier = Modifier.fillMaxHeight().padding(14.dp)) {
+            picture()
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(10.dp))
+            words()
         }
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = tint.accent.copy(alpha = 0.75f),
-            modifier = (if (wide) Modifier.align(Alignment.CenterEnd).padding(end = 10.dp) else Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 10.dp)).size(22.dp),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 10.dp).size(22.dp),
         )
     }
 }

@@ -316,6 +316,8 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
   (3 / 4 columns wider; hidden while searching) and a tap opens the subject's OWN page: web `/subject/:id` (`src/pages/Subject.tsx`, shared class rule in `src/scope.ts`),
   Home does NOT repeat the documents under the grid (owner: "this is repetition, remove it"): no "Notes for <class>" list, chips or sort on Home; documents appear on Home ONLY while
   searching ("Search results") or as an empty/error state; kind chips and sort live on the subject page. Web e2e asserts there are no `.note-card` on Home.
+  ALL subject cards are exactly the same size (web: `grid-auto-rows: 1fr`; Android: one fixed 156 dp height). A last card alone on its row keeps that size, left-aligned (Android: a weighted Spacer
+  beside it) -- NEVER stretch it across the row to fill the gap (owner: "don't chase filling gaps, chase neatness and quality").
   Android `SubjectScreen.kt` (an overlay in `MainScreen` that slides in; the phone's Back button closes it). The page has Back, a coloured header (icon, name, counts), a search that
   only looks inside the subject, Notes/Exams chips, sort, then the documents. Home no longer filters by subject (`selectedSubjectId` in LibraryViewModel is now unused by Home).
   NOTE: `ci/capture.py` (the emulator walkthrough) is out of date with the app (it still looks for the old announcement card, "Past papers" and the subject tiles) and needs a rewrite.

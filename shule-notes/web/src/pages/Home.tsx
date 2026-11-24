@@ -6,7 +6,7 @@ import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, ExpandMore, Search, Bell } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 import { preloadReader } from '../prefetch';
-import { useClassScope, useEveryClass, useGridColumns } from '../scope';
+import { useClassScope, useEveryClass } from '../scope';
 import { useUnread } from '../unread';
 
 type Sort = 'new' | 'views' | 'az';
@@ -27,7 +27,6 @@ export function HomePage() {
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
   const unread = useUnread();
-  const gridCols = useGridColumns();
 
   const scrollTo = useRef(saved.current.y);
   useEffect(() => { preloadReader(); }, []);
@@ -110,17 +109,13 @@ export function HomePage() {
         <><div className="section-head"><h2>Subjects</h2><span className="muted count">{subjectsInScope.length} {subjectsInScope.length === 1 ? 'subject' : 'subjects'}</span></div>
           {/* A grid (matrix), so every subject is in view without sideways scrolling; a tap opens that subject's own page. */}
           <div className="subject-grid">
-            {subjectsInScope.map((s, i) => {
-              // A last card left alone on its row stretches across the empty cells and lies flat, so the grid has no hole in it.
-              const left = subjectsInScope.length % gridCols;
-              const flat = i === subjectsInScope.length - 1 && left !== 0;
-              return (
-              <button key={s.id} className={`subject-tile sv rise ${flat ? 'flat' : ''}`} style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, ...(flat ? { gridColumn: `span ${gridCols - left + 1}` } : {}), ...(subjectVars(s.name) as CSSProperties) }} onClick={() => nav(`/subject/${s.id}`)}>
+            {subjectsInScope.map((s, i) => (
+              <button key={s.id} className="subject-tile sv rise" style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, ...(subjectVars(s.name) as CSSProperties) }} onClick={() => nav(`/subject/${s.id}`)}>
                 <span className="s-ico"><SubjectIcon name={s.name} size={30} /></span>
                 <b>{s.name}</b><small>{countIn(s.id)} {countIn(s.id) === 1 ? 'document' : 'documents'}</small>
                 <Chevron className="s-go" width={18} height={18} />
               </button>
-            ); })}
+            ))}
           </div></>
       )}
 

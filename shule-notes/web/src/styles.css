@@ -500,7 +500,7 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 }
 
 /* ---- Subjects as a grid (matrix) and a subject's own page ---- */
-.subject-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.subject-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 12px; }
 @media (min-width: 640px) { .subject-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 960px) { .subject-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
 .subject-grid .subject-tile { position: relative; width: auto; min-height: 118px; padding: 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--s-soft) 55%, var(--surface)), var(--surface) 70%); }
@@ -510,12 +510,7 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .subject-grid .subject-tile:active { transform: scale(0.98); }
 .subject-grid .subject-tile b { margin-top: auto; min-height: 0; }
 .subject-grid .subject-tile small { margin-top: 2px; }
-/* A last card left alone on its row stretches across the empty cells and lies flat (picture left, name right): no hole in the grid. */
-.subject-grid .subject-tile.flat { display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'ico name' 'ico count'; column-gap: 14px; align-items: center; min-height: 0; }
-.subject-grid .subject-tile.flat .s-ico { grid-area: ico; margin: 0; }
-.subject-grid .subject-tile.flat b { grid-area: name; margin: 0; align-self: end; }
-.subject-grid .subject-tile.flat small { grid-area: count; align-self: start; }
-.subject-grid .subject-tile.flat .s-go { top: 50%; margin-top: -9px; }
+/* Every card is exactly the same size (all rows share the height of the tallest), a last card on its own row simply keeps that size. */
 .subject-hero { position: relative; margin-top: 12px; padding: 14px 18px 20px; border-radius: 26px; background: linear-gradient(150deg, var(--s-soft), color-mix(in srgb, var(--s-soft) 40%, var(--surface))); border: 1px solid color-mix(in srgb, var(--s-acc) 22%, var(--line)); }
 .subject-hero .back-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px 0 10px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: 600 14px 'Poppins', sans-serif; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); cursor: pointer; }
 .subject-hero-row { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
@@ -527,3 +522,10 @@ button.glass:hover { background: rgba(255, 255, 255, 0.2); transform: translateY
 .searchbar.flat > svg { top: 13px; left: 15px; }
 .searchbar.flat .clear { top: 3px; }
 @media (min-width: 900px) { .searchbar.flat { left: auto; right: auto; bottom: auto; } .searchbar.flat input { height: 54px; } .searchbar.flat > svg { top: 15px; } }
+
+/* Very narrow phones: slightly smaller card text so "Entrepreneurship" stays in one piece (cards keep ONE size). */
+@media (max-width: 359px) {
+  .subject-grid { gap: 10px; }
+  .subject-grid .subject-tile { padding: 12px 10px; }
+  .subject-grid .subject-tile b { font-size: 12px; }
+}
