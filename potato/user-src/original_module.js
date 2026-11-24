@@ -71,10 +71,10 @@ function swSkip(e){ return e.nodeType === 1 && (e.hasAttribute('data-no-i18n') |
 function swTree(root){
   if (!root) return;
   if (root.nodeType === 3) { if (!root.parentNode || !(root.parentNode.closest && root.parentNode.closest('[data-no-i18n]'))) swNode(root); return; }
-  if (root.nodeType !== 1 || swSkip(root) || (root.closest && root.closest('[data-no-i18n]'))) return;
-  const w = document.createTreeWalker(root, 5, { acceptNode: n => n.nodeType === 1 && swSkip(n) ? 2 : 1 });
+  if (root.nodeType !== 1 || (swSkip(root) && root.tagName !== 'TEXTAREA') || (root.closest && root.closest('[data-no-i18n]'))) return;
+  const w = document.createTreeWalker(root, 5, { acceptNode: n => n.nodeType === 1 && swSkip(n) && n.tagName !== 'TEXTAREA' ? 2 : 1 });
   swAttrs(root);
-  for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) swNode(n); else swAttrs(n); }
+  for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) { if (!(n.parentNode && n.parentNode.tagName === 'TEXTAREA')) swNode(n); } else swAttrs(n); }
 }
 function swStart(){
   if (_mo || !document.body) return;

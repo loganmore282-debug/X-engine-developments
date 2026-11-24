@@ -1,10 +1,10 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'potato-admin-shell-v187';
+const CACHE = 'potato-admin-shell-v188';
 // The panel lives under a secret path on the SAME host as the member app, so
 // everything it owns is addressed relative to this worker (never from '/'),
 // and its cache name has its own prefix so neither worker ever clears the
 // other's cache.
-const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'vendor/firebase-app-compat.js', 'vendor/firebase-messaging-compat.js'];
+const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'vendor/firebase-app-compat.js', 'vendor/firebase-messaging-compat.js', 'lang-fr.json'];
 // The admin panel's own built-in icon (never the one uploaded for the members' app).
 const BRAND_ICON = new URL('icon-192.png', self.location.href).href;
 

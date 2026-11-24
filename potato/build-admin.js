@@ -153,4 +153,7 @@ outHtml = outHtml.replace('<head>', '<head>\n' + guardTag);
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT_HTML, outHtml);
 log('admin/index.html  :', fs.statSync(OUT_HTML).size, 'bytes — deployed artifact written');
+fs.copyFileSync(path.join(ROOT, 'admin-src', 'lang-fr.json'), path.join(OUT_DIR, 'lang-fr.json'));
+log('admin/lang-fr.json:', fs.statSync(path.join(OUT_DIR, 'lang-fr.json')).size, 'bytes — the French text (the panel is French by default)');
+
 log('\nDone. Deploy the generated admin/ output.');

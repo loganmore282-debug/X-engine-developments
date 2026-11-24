@@ -41,6 +41,7 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
+<script>try{if(localStorage.getItem('potato_admin_lang')!=='en'){document.documentElement.classList.add('i18n-wait');setTimeout(function(){document.documentElement.classList.remove('i18n-wait')},2500);}}catch(e){}</script>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#e5231d">
 <link rel="manifest" href="manifest.json">
@@ -234,6 +235,14 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .chart-bars{flex:1;display:flex;align-items:flex-end;gap:2px;width:100%;justify-content:center}
   .chart-bars i{display:block;width:7px;border-radius:3px 3px 0 0;min-height:2px}
   .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
+
+  /* Language: FR | EN pill (login card and top bar). French is the default; English is the text the panel is written in. */
+  html.i18n-wait body{visibility:hidden}
+  .adm-lang{display:inline-flex;padding:3px;border-radius:999px;background:var(--line2);border:1px solid var(--line);gap:2px}
+  .adm-lang button{border:0;background:none;min-width:34px;height:26px;padding:0 9px;border-radius:999px;font:700 12px/26px inherit;font-family:inherit;letter-spacing:.3px;color:var(--sub);cursor:pointer}
+  .adm-lang button.on{background:var(--gold);color:var(--gold-ink)}
+  .login-card{position:relative;padding-top:54px}
+  .login-card .adm-lang{position:absolute;top:14px;right:14px}
 </style>
 <script data-potato-idle>
 // Where a login is kept. localStorage, so it survives closing the app or the browser (the server still ends it after its own idle/maximum time);
@@ -291,6 +300,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 <!-- LOGIN -->
 <div class="login" id="loginView">
   <div class="login-card">
+    <div class="adm-lang" data-no-i18n role="group" aria-label="Language"><button type="button" data-l="fr" onclick="setAdminLang('fr')">FR</button><button type="button" data-l="en" onclick="setAdminLang('en')">EN</button></div>
     <div class="brand">
       <!-- Owner: "in admin panel still has old svgs and icons ie that slanting
            8 and that ladder svg on the home, please let it be potato logo."
@@ -320,6 +330,7 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
         <div class="mk" id="brandMarkTop"><img src="icon-192.png" alt="" width="34" height="34"></div>
         <b data-brandadmin>Potato Admin</b>
         <div class="spacer"></div>
+        <div class="adm-lang" data-no-i18n role="group" aria-label="Language"><button type="button" data-l="fr" onclick="setAdminLang('fr')">FR</button><button type="button" data-l="en" onclick="setAdminLang('en')">EN</button></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications for new deposits and withdrawal requests on this device/browser. Tapping an alert opens this panel -- it does not approve or send anything by itself.">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
@@ -357,6 +368,115 @@ window.createPotatoIdleSession = function(key, onExpire, onActivity){
 // Same host as the page; the panel itself lives under a secret path, so the
 // API is addressed from the root (/k7x2), while the panel's own files are relative.
 const SERVER = '/k7x2';
+
+// ── LANGUAGE: the panel is written in English; French is laid over it (owner: "Yes add" -- French / English switch for the admin) ──
+// lang-fr.json holds the French for every sentence (Soda's admin table where the wording is shared, hand-written for the rest). The page is
+// swept for text nodes and the placeholder/title/aria-label/alt attributes; a MutationObserver sweeps whatever the panel draws afterwards,
+// native alert/confirm/prompt text goes through t(). French is the default; the choice is kept per browser (localStorage 'potato_admin_lang').
+var ADM_LANG_KEY = 'potato_admin_lang';
+var LANG = 'fr';
+try { if (localStorage.getItem(ADM_LANG_KEY) === 'en') LANG = 'en'; } catch (_) {}
+var _FR = null, _FRP = null, _FRK = null, _frLoad = null, _tcache = new Map(), _orig = new WeakMap(), _oattr = new WeakMap(), _mo = null;
+function frLoad(){
+  if (_FR) return Promise.resolve(true);
+  if (_frLoad) return _frLoad;
+  _frLoad = fetch('lang-fr.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : Promise.reject(new Error('lang'))).then(j => {
+    _FR = j.dict || {}; _FRP = (j.pats || []).map(p => { try { return [new RegExp('^' + p[0] + '$'), p[1]]; } catch (_) { return null; } }).filter(Boolean); return true;
+  }).catch(() => { _frLoad = null; return false; });
+  return _frLoad;
+}
+function tValueLike(r){ return !/[A-Za-zÀ-ÿ]{3}/.test(r.replace(/FCFA|XOF|UGX/g, '')); }
+function tLookup(key){
+  const v = _FR[key]; if (v) return v;
+  for (const [re, to] of _FRP) { const m = re.exec(key); if (m) return to.replace(/\$(\d)/g, (_, i) => { const g = m[+i] || ''; const x = tTrans(g); return x; }); }
+  if (/^[a-z]/.test(key)) { const up = key[0].toUpperCase() + key.slice(1), r = _FR[up]; if (r) return r[0].toLowerCase() + r.slice(1); }
+  // a known sentence with a figure glued on before or after it
+  if (!_FRK) _FRK = Object.keys(_FR).filter(k => k.length >= 4).sort((a, b) => b.length - a.length);
+  for (const k of _FRK) {
+    if (key.length > k.length && key.startsWith(k) && tValueLike(key.slice(k.length))) return _FR[k] + key.slice(k.length);
+    if (key.length > k.length && key.endsWith(k) && tValueLike(key.slice(0, key.length - k.length))) return key.slice(0, key.length - k.length) + _FR[k];
+  }
+  return null;
+}
+function tTrans(s){
+  if (!_FR || typeof s !== 'string' || !/[A-Za-zÀ-ÿ]/.test(s)) return s;
+  const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(s), key = m[2].replace(/\s+/g, ' ');
+  if (!key) return s;
+  let r = _tcache.get(key);
+  if (r === undefined) { r = tLookup(key); if (_tcache.size > 6000) _tcache.clear(); _tcache.set(key, r); }
+  return r === null ? s : m[1] + r + m[3];
+}
+// For text that never lands in the page (a native dialog, a downloaded file): English in, the chosen language out.
+function t(s){ return LANG === 'fr' ? tTrans(s) : s; }
+var _I18N_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+function swNode(n){
+  const v = n.data, o = _orig.get(n);
+  if (LANG === 'fr') {
+    if (o && v === o.fr) return;
+    const x = tTrans(v);
+    if (x !== v) { _orig.set(n, { en: v, fr: x }); n.data = x; } else if (o) _orig.delete(n);
+  } else if (o) { if (v === o.fr) n.data = o.en; _orig.delete(n); }
+}
+function swAttrs(e){
+  let rec = _oattr.get(e);
+  const list = _I18N_ATTRS.concat(e.tagName === 'INPUT' && /^(button|submit)$/.test(e.type) ? ['value'] : []);
+  for (const a of list) {
+    if (!e.hasAttribute(a)) continue;
+    const v = e.getAttribute(a), o = rec && rec[a];
+    if (LANG === 'fr') {
+      if (o && v === o.fr) continue;
+      const x = tTrans(v);
+      if (x !== v) { if (!rec) { rec = {}; _oattr.set(e, rec); } rec[a] = { en: v, fr: x }; e.setAttribute(a, x); } else if (o) delete rec[a];
+    } else if (o) { if (v === o.fr) e.setAttribute(a, o.en); delete rec[a]; }
+  }
+}
+function swSkip(e){ return e.nodeType === 1 && (e.hasAttribute('data-no-i18n') || /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/.test(e.tagName)); }
+function swTree(root){
+  if (!root) return;
+  if (root.nodeType === 3) { if (!root.parentNode || !(root.parentNode.closest && root.parentNode.closest('[data-no-i18n]'))) swNode(root); return; }
+  if (root.nodeType !== 1 || (swSkip(root) && root.tagName !== 'TEXTAREA') || (root.closest && root.closest('[data-no-i18n]'))) return;
+  const w = document.createTreeWalker(root, 5, { acceptNode: n => n.nodeType === 1 && swSkip(n) && n.tagName !== 'TEXTAREA' ? 2 : 1 });
+  swAttrs(root);
+  for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) { if (!(n.parentNode && n.parentNode.tagName === 'TEXTAREA')) swNode(n); } else swAttrs(n); }
+}
+function swStart(){
+  if (_mo || !document.body) return;
+  _mo = new MutationObserver(list => {
+    _mo.takeRecords();
+    const seen = new Set();
+    for (const m of list) {
+      if (m.type === 'characterData') seen.add(m.target);
+      else if (m.type === 'attributes') seen.add(m.target);
+      else m.addedNodes.forEach(n => seen.add(n));
+    }
+    for (const n of seen) if (n.isConnected) swTree(n);
+    _mo.takeRecords();
+  });
+  _mo.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: _I18N_ATTRS.concat(['value']) });
+}
+function swAll(){ if (_mo) _mo.disconnect(); _mo = null; swTree(document.body); swStart(); }
+function paintAdminLang(){ document.querySelectorAll('.adm-lang button').forEach(b => b.classList.toggle('on', b.dataset.l === LANG)); }
+window.setAdminLang = async function(code){
+  if (code !== 'fr' && code !== 'en') return;
+  if (code === 'fr' && !(await frLoad())) { alert('Le français demande internet la première fois. / French needs the internet the first time.'); return; }
+  LANG = code;
+  try { localStorage.setItem(ADM_LANG_KEY, code); } catch (_) {}
+  document.documentElement.lang = code;
+  swAll(); paintAdminLang();
+};
+(function(){
+  const reveal = () => document.documentElement.classList.remove('i18n-wait');
+  const start = () => {
+    document.documentElement.lang = LANG;
+    if (LANG === 'fr') frLoad().then(ok => { if (ok) { swAll(); } else { LANG = 'en'; document.documentElement.lang = 'en'; } paintAdminLang(); reveal(); });
+    else { paintAdminLang(); reveal(); }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  const _al = window.alert, _cf = window.confirm, _pr = window.prompt;
+  window.alert = function(m){ return _al.call(window, t(m)); };
+  window.confirm = function(m){ return _cf.call(window, t(m)); };
+  window.prompt = function(m, d){ return _pr.call(window, t(m), d); };
+})();
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 // Kept in window.potatoKeep (localStorage): the login survives closing the tab or the browser, until the server ends it (2 hours idle, 8 in all) or you log out.

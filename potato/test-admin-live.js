@@ -21,6 +21,7 @@ const server = http.createServer((q, r) => { let f = path.join(ROOT, q.url.split
   const b = await chromium.launch(); let failed = null;
   try {
     const page = await (await b.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' })).newPage();
+    await page.addInitScript("try{localStorage.setItem('potato_admin_lang','en')}catch(e){}");   // these tests read the panel's English text; the language itself is test-admin-french.js
     const errs = []; page.on('pageerror', e => errs.push(String(e)));
     await page.route('**/k7x2/**', async route => {
       const p = new URL(route.request().url()).pathname.replace(/^\/k7x2/, '');
