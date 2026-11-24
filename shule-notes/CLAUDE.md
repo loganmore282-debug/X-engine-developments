@@ -235,7 +235,7 @@ app's "Forgot password?" just shows the support contacts from Settings (`GET /co
   `media.js`); `GET /onboarding` is public and says `configured` (false = the owner made none, so the app shows its own three
   built-in slides; true with none switched on = no introduction). Design is our own (full-bleed picture, story-style bars,
   one wide button), `ui/onboarding/IntroScreen.kt`. Images load with Coil.
-  The BUILT-IN introduction (used until the owner makes slides) has FOUR slides: notes, AI helper, "Be ready for every exam", study anywhere. The exam slide's picture is `web/public/intro/4.jpg` (web shows green until the file exists); on Android it is an icon on green until an `intro_4` drawable is added (then switch it to `drawable = R.drawable.intro_4`). The e2e smoke test asserts four slides.
+  The BUILT-IN introduction (used until the owner makes slides) has FOUR slides: notes, AI helper, "Be ready for every exam" (the owner's own photo of a smiling pupil at a desk, 800x534 original, so it is laid on a soft blurred classroom backdrop that fades to dark green instead of being blown up: `web/public/intro/4.jpg` + Android `drawable-nodpi/intro_4.jpg`), study anywhere. The e2e smoke test asserts four slides.
 - **Profile photo:** the default picture is the Shule Notes logo (`ProfileAvatar` in `ui/components/Brand.kt`); a student can choose
   a photo (system photo picker, shrunk/straightened to 512px square on the phone, `AvatarImage`), stored on the server disk
   (`POST /auth/avatar`, `GET /auth/avatar` authenticated, `avatarVersion` on the user busts caches, removed with the
