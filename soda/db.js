@@ -25,12 +25,37 @@
 // within this one Node process, not against a missing DB feature. Not
 // something to rip out or "upgrade away" just because a bigger cluster is
 // now available.
-const { MongoClient } = require('mongodb');
+// Two databases are supported and ONE is chosen at start-up (dbengine.js): MongoDB, which is what this server used until now, and the VPS's own
+// local database (localstore.js, in memory + a journal on the VPS disk). The choice is a small file (ENGINE.json) that only
+// deploy/migrate-to-vps-db.sh writes, after the copy has been checked, so shipping this code changes nothing until you run that script.
+const dbEngine = require('./dbengine');
+const APP_KEY = 'soda';
+let MongoClient = null;   // loaded only while this server is still on MongoDB
+let _store = null;        // the local database, when that is the one in use
 
 let _client = null;
 let _mdb    = null;
 
 async function connectMongo(uri) {
+  const eng = dbEngine.resolve(APP_KEY);
+  if (eng.engine !== 'local') { console.log('Database: MongoDB (' + eng.reason + ')'); return connectMongoLegacy(uri); }
+  const { openStore } = require('./localstore');
+  _store = openStore({ dir: eng.dir, backupDir: eng.backupDir, keepBackups: Number(process.env.SODA_KEEP_BACKUPS) || 14, sync: process.env.SODA_SYNC, log: console });
+  _mdb = _store;
+  const st = _store.stats();
+  console.log(`Database: the VPS (${eng.dir}): ${st.docs} document(s) in ${Object.keys(st.collections).length} collection(s) -- ${eng.reason}`);
+}
+function usesLocalDb() { return dbEngine.resolve(APP_KEY).engine === 'local'; }
+// Closes the database cleanly (used on shutdown) so the last writes are on disk.
+async function closeDb() {
+  if (_store) { const x = _store; _store = null; await x.close(); }
+  else if (_client) { try { await _client.close(); } catch (_) {} }
+}
+function dbStats() { return _store ? _store.stats() : null; }
+function backupNow(destDir) { if (!_store) throw new Error('the local database is not in use'); return _store.backup(destDir); }
+
+async function connectMongoLegacy(uri) {
+  MongoClient = MongoClient || require('mongodb').MongoClient;
   _client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 10000, // give up finding a server after 10s
     connectTimeoutMS:         15000,
@@ -618,4 +643,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb, closeDb, dbStats, backupNow, usesLocalDb };
