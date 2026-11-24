@@ -59,6 +59,7 @@ const winApi = winFor(180);
 
 // An EAT wall-clock time as an epoch, so "is 3pm inside the window" is asked
 // in the zone the server judges in and not in whatever the test box is set to.
+const THIS_MONTH_DATE = '01/15/2026';   // dates are stored MM/DD/YYYY; the fake clock is 15 January 2026
 const eatAt = (h, m = 0) => Date.UTC(2026, 0, 15, h - 3, m);
 
 console.log('— times are parsed, not guessed —');
@@ -185,7 +186,7 @@ function run(state, body) {
     uniqueRef: async () => 'S1',
     mobileMoneyRefPrefix: async () => 'S',
     textOf: v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''),
-    nowStr: () => ({ date: '15/01/2026', time: '12:00' }),
+    nowStr: () => ({ date: THIS_MONTH_DATE, time: '12:00' }),
     fmtMoney: n => 'UGX ' + Number(n).toLocaleString('en-US'),
     // The route stamps the member's region onto the withdrawal document now.
     currentRegionKey: () => 'ug',
@@ -259,7 +260,7 @@ function run(state, body) {
 function fresh(extra = {}) {
   return {
     settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
-                requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
+                requireInvestToWithdraw: false, maxWithdrawalsPerMonth: 0,
                 withdrawWindowEnabled: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
     banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],
@@ -362,23 +363,33 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, { ...REQ, amount: 1000 });
   ck(r.code === 400 && r.replied.code !== 'WINDOW_CLOSED', `an unrestricted member still meets the minimum (${r.code} ${r.replied && r.replied.code})`);
 
-  // The same mark lifts the daily number of withdrawals.
-  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  // The same mark lifts the monthly number of withdrawals.
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: THIS_MONTH_DATE }] });
   st.user.withdrawAnytime = true;
   r = await run(st, REQ);
-  ck(r.code === 200, `an unrestricted member is not held to the daily number (${r.code} ${r.replied && r.replied.message})`);
-  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  ck(r.code === 200, `an unrestricted member is not held to the monthly number (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: THIS_MONTH_DATE }] });
   st.user.withdrawAnytime = false;
   r = await run(st, REQ);
-  ck(r.code === 400, `without the mark the same request meets the daily number (${r.code})`);
+  ck(r.code === 400, `without the mark the same request meets the monthly number (${r.code})`);
 
-  console.log('\n— the daily limit counts payouts, not refunded failures —');
-  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: '15/01/2026' }] });
+  console.log('\n— the monthly limit counts payouts, not refunded failures —');
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: THIS_MONTH_DATE }] });
   r = await run(st, REQ);
-  ck(r.code === 200, `a refunded (declined) request today does not use the allowance (${r.code} ${r.replied && r.replied.message})`);
-  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  ck(r.code === 200, `a refunded (declined) request this month does not use the allowance (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: THIS_MONTH_DATE }] });
   r = await run(st, REQ);
-  ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
+  ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one this month still does (${r.code})`);
+
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '12/20/2025' }] });
+  r = await run(st, REQ);
+  ck(r.code === 200, `a paid one LAST month does not count (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '01/02/2026' }] });
+  r = await run(st, REQ);
+  ck(r.code === 400, `a paid one earlier in the same month still does (${r.code})`);
+  st = fresh({ settings: { maxWithdrawalsPerMonth: 0 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: THIS_MONTH_DATE }] });
+  r = await run(st, REQ);
+  ck(r.code === 200, `0 means no limit (${r.code} ${r.replied && r.replied.message})`);
 
   console.log('\n— the app no longer promises hours nobody keeps —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');

@@ -658,7 +658,7 @@ const DEFAULT_SETTINGS = {
   // right after the loading screen. See the MAINTENANCE GATE section below
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
-  maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  maxWithdrawalsPerMonth: 0, requireInvestToWithdraw: true,
   // Owner: "remove first purchase cashback immediately". OFF: the first purchase waits like every other one (first cashback at the next midnight schedule).
   // The admin switch stays, but nothing is paid at the moment of purchase unless the owner ticks it on again.
   firstPurchaseCashbackNow: false,
@@ -5355,16 +5355,18 @@ app.post('/withdraw/request', async (req, res) => {
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
-      const maxPerDay = unrestricted ? 0 : (Number(sett.maxWithdrawalsPerDay) || 0);   // an unrestricted member has no daily number
-      if (maxPerDay > 0) {
-        const today = nowStr().date;
-        const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
+      const maxPerMonth = unrestricted ? 0 : (Number(sett.maxWithdrawalsPerMonth) || 0);   // an unrestricted member has no monthly number
+      if (maxPerMonth > 0) {
+        // The number is per calendar month (resets on the 1st). Dates are stored MM/DD/YYYY, so a request is "this month" when its
+        // month and year match today's.
+        const today = nowStr().date, thisMonth = today.slice(0, 2) + '/' + today.slice(6);
+        const mineSnap = await db.collection('withdrawals').where('userId', '==', userId).get();
         // A declined request was refunded in full and paid nothing, so it must not
         // use up the member's allowance (a provider failure would otherwise lock
-        // them out of trying again until tomorrow).
-        const usedToday = todaySnap.docs.filter(d => d.data().status !== 'declined').length;
-        if (usedToday >= maxPerDay)
-          throw new Error(`You've reached today's limit of ${maxPerDay} withdrawal${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
+        // them out of trying again until next month).
+        const usedMonth = mineSnap.docs.filter(d => { const w = d.data(); const dt = String(w.date || ''); return w.status !== 'declined' && dt.slice(0, 2) + '/' + dt.slice(6) === thisMonth; }).length;
+        if (usedMonth >= maxPerMonth)
+          throw new Error(`You've reached this month's limit of ${maxPerMonth} withdrawal${maxPerMonth === 1 ? '' : 's'}. Try again next month.`);
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
@@ -6762,7 +6764,7 @@ app.get('/admin/settings', async (req, res) => {
 const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
-  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000], maintenanceMinutes: [1, 10080],
+  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerMonth: [0, 1000], maintenanceMinutes: [1, 10080],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
   autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
@@ -9022,28 +9024,28 @@ app.post('/admin/analytics', async (req, res) => {
     }
     // Withdrawals that can be processed today, worked out with the live withdrawal rules (Admin > Settings): the requests already waiting,
     // and the most members could still request today. A member counts only if they pass the same checks /withdraw/request makes:
-    // not banned, a product bought when that is required, no unpaid request already open, today's number of withdrawals not used up
+    // not banned, a product bought when that is required, no unpaid request already open, this month's number of withdrawals not used up
     // (unless marked unrestricted), and a balance that reaches the minimum once cut down to the allowed multiple and the maximum.
     const wSett = await getSettings();
     const wMin = Number(wSett.minWithdraw) || 0, wMax = Number(wSett.maxWithdraw) || 0, wMult = Math.max(0, Math.floor(Number(wSett.withdrawMultiple) || 0));
-    const wFee = Number(wSett.withdrawFeePct) || 0, wPerDay = Number(wSett.maxWithdrawalsPerDay) || 0, wNeedProduct = wSett.requireInvestToWithdraw !== false;
-    const todayStartMs = eatNextMidnight(nowMs) - 86400000;
+    const wFee = Number(wSett.withdrawFeePct) || 0, wPerMonth = Number(wSett.maxWithdrawalsPerMonth) || 0, wNeedProduct = wSett.requireInvestToWithdraw !== false;
+    const monthStartMs = (() => { const e = new Date(nowMs + tzOffMs()); return Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), 1) - tzOffMs(); })();
     const runningUsers = new Set(); activeInvSnap.forEach(d => runningUsers.add(d.data().userId));
-    const openUsers = new Set(), usedToday = new Map();
+    const openUsers = new Set(), usedMonth = new Map();
     const bannedIds = new Set(); usersSnap.forEach(d => { if (d.data().status === 'banned') bannedIds.add(d.id); });
     const waiting = { count: 0, net: 0, heldCount: 0, heldNet: 0 };
     witSnap.forEach(d => {
       const w = d.data(); if (!mine(w)) return;
       if (['creating', 'pending', 'sending', 'processing'].includes(w.status)) openUsers.add(w.userId);
       const ms = tsMillis(w.createdAt);
-      if (ms >= todayStartMs && w.status !== 'declined') usedToday.set(w.userId, (usedToday.get(w.userId) || 0) + 1);
+      if (ms >= monthStartMs && w.status !== 'declined') usedMonth.set(w.userId, (usedMonth.get(w.userId) || 0) + 1);
       if (w.status === 'pending') {
         const a = w.net == null ? finiteMoney(w.amount) : finiteMoney(w.net);
         if (bannedIds.has(w.userId)) { waiting.heldCount++; waiting.heldNet += a; } else { waiting.count++; waiting.net += a; }
       }
     });
     const canDo = { count: 0, gross: 0, net: 0, runningCount: 0, runningNet: 0 };
-    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0 };
+    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, monthlyUsed: 0, belowMin: 0 };
     usersSnap.forEach(d => {
       const u = d.data();
       if (!mine({ userId: d.id, regionKey: u.regionKey })) return;
@@ -9053,7 +9055,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
-      if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
+      if (wPerMonth > 0 && u.withdrawAnytime !== true && (usedMonth.get(d.id) || 0) >= wPerMonth) { blocked.monthlyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
       amt = wMult > 0 ? Math.floor(amt / wMult) * wMult : Math.floor(amt);
       if (amt < wMin || amt <= 0) { blocked.belowMin++; return; }
@@ -9063,7 +9065,7 @@ app.post('/admin/analytics', async (req, res) => {
     });
     const withdrawToday = {
       waiting, canDo, blocked,
-      rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
+      rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perMonth: wPerMonth, needProduct: wNeedProduct,
         hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
     };
     plans.nextMaturing = plans._upcoming.map(u => ({ phone: (accounts.get(u.userId) || {}).phone || '', product: u.product, amount: u.amount, cashback: u.cashback, at: u.at })); delete plans._upcoming;

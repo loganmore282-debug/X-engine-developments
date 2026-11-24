@@ -1376,14 +1376,14 @@ async function renderAnalytics(silent){
       </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Withdrawals to be processed today</h2>
-      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
+      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perMonth?wt.rules.perMonth+' withdrawal'+(wt.rules.perMonth===1?'':'s')+' a month':'no monthly limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(wt.waiting.net)}</div><div class="l">Requests waiting to be paid today, net (${wt.waiting.count||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.net)}</div><div class="l">Most that could still be requested today, net payout (${wt.canDo.count||0} members)</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.runningNet)}</div><div class="l">Of that, members with a running product (${wt.canDo.runningCount||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.gross)}</div><div class="l">Same members, wallet amount before the fee</div></div>
       </div>
-      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
+      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.monthlyUsed||0} who used this month's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
       <p class="muted">The second figure is a ceiling, not a forecast: it assumes every member who is allowed to withdraw asks for the most they can, once, today.</p>
     </div>
     ${a.truncated?'<p class="muted" style="color:var(--gold)">Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.</p>':''}
@@ -3246,7 +3246,7 @@ async function renderSettings(){
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Max withdrawals per user per day (0 = no limit)</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
+        <div><label>Max withdrawals per user per month (0 = no limit)</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerMonth',0)}"></div>
         <div><label>Payment reference starts with</label><input id="sRefPrefix" type="text" maxlength="12" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(v('referencePrefix','S'))}">
           <div id="sRefPrefixPreview" style="font-size:12px;opacity:.7;margin-top:4px"></div></div>
       </div>
@@ -3366,7 +3366,7 @@ async function renderSettings(){
   $('saveRates').addEventListener('click', async()=>{
     // A blank number box would be read as 0 (a 0% commission or a 0 minimum would be saved silently): refuse it instead.
     for(const id of ['sMinDep','sMinWit','sWelcome','sFee','sC1','sC2','sC3','sMaxWitDay','sAutoMin','sAutoMax','sAutoCap']){ if($(id)&&$(id).value.trim()!==''&&!/^\d+$/.test($(id).value.trim())){ toast('Use whole numbers only (no decimals or minus sign).','err'); $(id).focus(); return; } }
-    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
+    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per month'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
       if($(id) && $(id).value.trim()===''){ toast(label+' cannot be blank. Type a number (0 is allowed).','err'); $(id).focus(); return; }
     }
     if(+$('sAutoMax').value < +$('sAutoMin').value){ toast('The longest wait cannot be shorter than the shortest wait.','err'); $('sAutoMax').focus(); return; }
@@ -3374,7 +3374,7 @@ async function renderSettings(){
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
-      maxWithdrawalsPerDay:+$('sMaxWitDay').value,
+      maxWithdrawalsPerMonth:+$('sMaxWitDay').value,
       autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked,
@@ -3637,7 +3637,7 @@ const ADMIN_LANG_ROWS = [
   ['Min withdrawal', 'Ssente entono ez\'okuggyamu', 'Utoaji wa chini', 'Retrait minimum', 'Kubikuza guto', 'Sente enkye ez\'okwihamu'],
   ['Withdrawal fee (%)', 'Ssente z\'obuweereza ku kuggyamu (%)', 'Ada ya utoaji (%)', 'Frais de retrait (%)', 'Amafaranga ya serivisi yo kubikuza (%)', 'Sente z\'obuheereza aha kwihamu (%)'],
   ['Withdrawal multiple', 'Ekigero ky\'okuggyamu', 'Kizidishi cha utoaji', 'Multiple de retrait', 'Igipimo cyo kubikuza', 'Ekigyero ky\'okwihamu'],
-  ['Max withdrawals per user per day', 'Okuggyamu okusinga buli mukozesa buli lunaku', 'Utoaji mkubwa kwa mtumiaji kwa siku', 'Retraits max par utilisateur par jour', 'Kubikuza ntarengwa kuri buri mukoresha ku munsi', 'Okwihamu okurikukira aha buri mukozesa aha izooba'],
+  ['Max withdrawals per user per month', 'Okuggyamu okusinga buli mukozesa buli mwezi', 'Utoaji mkubwa kwa mtumiaji kwa mwezi', 'Retraits max par utilisateur par mois', 'Kubikuza ntarengwa kuri buri mukoresha mu kwezi', 'Okwihamu okurikukira aha buri mukozesa omu kwezi'],
   ['L1 commission (%)', 'Ssente z\'omutendera 1 (%)', 'Kamisheni ya ngazi 1 (%)', 'Commission niveau 1 (%)', 'Komisiyo y\'urwego rwa 1 (%)', 'Sente z\'omurengo 1 (%)'],
   ['L2 commission (%)', 'Ssente z\'omutendera 2 (%)', 'Kamisheni ya ngazi 2 (%)', 'Commission niveau 2 (%)', 'Komisiyo y\'urwego rwa 2 (%)', 'Sente z\'omurengo 2 (%)'],
   ['L3 commission (%)', 'Ssente z\'omutendera 3 (%)', 'Kamisheni ya ngazi 3 (%)', 'Commission niveau 3 (%)', 'Komisiyo y\'urwego rwa 3 (%)', 'Sente z\'omurengo 3 (%)'],
