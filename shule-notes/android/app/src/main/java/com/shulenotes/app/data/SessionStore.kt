@@ -186,6 +186,8 @@ class SessionStore(private val context: Context) {
         context.dataStore.edit {
             if (keepSaved) {
                 it.remove(TOKEN_KEY); it.remove(NAME_KEY); it.remove(CONTACT_KEY); it.remove(CLASS_KEY); it.remove(AVATAR_KEY); it.remove(RECENT_KEY); it.remove(LIBRARY_KEY); it.remove(SEEN_KEY); it.remove(SEARCHES_KEY); it.remove(STUDY_KEY); it.remove(FINISHED_KEY)
+                // Signing out brings the introduction back (owner's request).
+                it.remove(INTRO_SEEN_KEY)
             } else {
                 it.clear()
             }

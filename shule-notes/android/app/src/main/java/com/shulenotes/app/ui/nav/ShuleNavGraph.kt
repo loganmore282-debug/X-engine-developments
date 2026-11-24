@@ -47,6 +47,8 @@ fun ShuleNavGraph(startDestination: String) {
     val navController = rememberNavController()
     val toMain = { navController.navigate(Routes.MAIN) { popUpTo(0) } }
     val toLogin = { navController.navigate(Routes.LOGIN) { popUpTo(0) } }
+    // After signing out the introduction comes first again, then the sign-in screen.
+    val toIntro = { navController.navigate(Routes.INTRO) { popUpTo(0) } }
     val scope = rememberCoroutineScope()
     // Someone who has not chosen a class yet is asked before seeing any notes.
     val afterSignIn: () -> Unit = {
@@ -63,7 +65,7 @@ fun ShuleNavGraph(startDestination: String) {
             ShuleApp.session.clear()
             NoteCache.clear()
             SessionHolder.expired.value = false
-            toLogin()
+            toIntro()
             Notifier.info(SessionHolder.expiredMessage ?: "Please sign in again")
             SessionHolder.expiredMessage = null
         }
@@ -111,7 +113,7 @@ fun ShuleNavGraph(startDestination: String) {
                 viewModel = viewModel(),
                 onOpenNote = { noteId -> navController.navigate("note/$noteId") { launchSingleTop = true } },
                 onOpenPage = { noteId, page -> navController.navigate("note/$noteId?page=$page") { launchSingleTop = true } },
-                onSignedOut = toLogin,
+                onSignedOut = toIntro,
             )
         }
         composable(

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AppProviders, useAuth, useLibrary, remember } from './store';
 import { Avatar } from './components';
@@ -14,14 +14,11 @@ import { SubjectPage } from './pages/Subject';
 import { useUnread } from './unread';
 import { API } from './api';
 
-// The building logo is shown in full once per visit (tab); a reload or later screens skip straight to the finished logo.
-let SPLASH_SEEN = false;
-try { SPLASH_SEEN = sessionStorage.getItem('shule_splash') === '1'; sessionStorage.setItem('shule_splash', '1'); } catch { /* private mode: just play it */ }
-const SPLASH_MS = SPLASH_SEEN ? 700 : 3500;
+// The logo builds itself EVERY time the site is opened (owner: "it should appear every time I visit").
+const SPLASH_MS = 3500;
 
 function Splash() {
-  // First open of this visit: the logo builds itself. Later in the same visit it is simply there.
-  return <div className="splash"><LogoBuild instant={SPLASH_SEEN} /></div>;
+  return <div className="splash" role="status"><LogoBuild /></div>;
 }
 
 // Shown for a moment while the reader (the biggest part of the site) arrives, if it was not already fetched in the background.
@@ -80,6 +77,12 @@ function Gate() {
   const [splash, setSplash] = useState(true);
   // After signing out, the sign-in screen comes back (not the create-account one the student used before).
   useEffect(() => { if (!user) setMode('in'); }, [user]);
+  // Logging out (or being signed out) brings the introduction back before the sign-in screen (owner's request).
+  const wasSignedIn = useRef(false);
+  useEffect(() => {
+    if (user) { wasSignedIn.current = true; return; }
+    if (wasSignedIn.current) { wasSignedIn.current = false; try { localStorage.removeItem('shule_intro_seen'); } catch { /* private mode */ } setSeenIntro(false); }
+  }, [user]);
   useEffect(() => { const t = window.setTimeout(() => setSplash(false), SPLASH_MS); return () => window.clearTimeout(t); }, []);
   if (!ready || splash) return <Splash />;
   if (!user) {

@@ -59,7 +59,9 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   await page.click('button[aria-label="Edit name"]'); await page.fill('.sheet input', 'Amina Joy Nakato'); await page.click('.sheet button:has-text("Save")');
   await page.waitForSelector('text=Amina Joy Nakato');
   step('log out'); await page.locator('button.btn:has-text("Log out")').evaluate((el) => el.scrollIntoView({ block: 'center' }));
-  await page.click('button.btn:has-text("Log out")'); await page.click('.sheet button:has-text("Log out")'); await page.waitForSelector('text=Welcome back');
+  await page.click('button.btn:has-text("Log out")'); await page.click('.sheet button:has-text("Log out")');
+  // Logging out brings the introduction back first, then the sign-in screen.
+  await page.waitForSelector('.intro-bottom'); await page.click('text=Skip'); await page.waitForSelector('text=Welcome back');
   await ctx.close();
   step('desktop'); const d = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const dp = await d.newPage();
