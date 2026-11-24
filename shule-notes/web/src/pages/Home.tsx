@@ -6,6 +6,7 @@ import { SubjectIcon, subjectVars } from '../subjectLook';
 import { Chevron, Close, ExpandMore, Search, Bell } from '../icons';
 import { PaySheet, untilLabel, useAccess } from '../Pay';
 import { preloadReader } from '../prefetch';
+import { useClassScope, useEveryClass } from '../scope';
 import { useUnread } from '../unread';
 
 type Sort = 'new' | 'views' | 'az';
@@ -16,13 +17,12 @@ export function HomePage() {
   const { notes, subjects, loading, error, reload, subjectName, levels } = useLibrary();
   const nav = useNavigate();
   // The student's place on Home (filters and scroll) is kept for the session, so coming back from a document lands exactly where they left.
-  const saved = useRef<{ query: string; subjectId: string | null; kind: 'all' | 'notes' | 'past-paper'; sort: Sort; y: number }>(
-    (() => { try { return JSON.parse(sessionStorage.getItem('shule_home') || 'null') || { query: '', subjectId: null, kind: 'all', sort: 'new', y: 0 }; } catch { return { query: '', subjectId: null, kind: 'all', sort: 'new', y: 0 }; } })());
+  const saved = useRef<{ query: string; kind: 'all' | 'notes' | 'past-paper'; sort: Sort; y: number }>(
+    (() => { try { return JSON.parse(sessionStorage.getItem('shule_home') || 'null') || { query: '', kind: 'all', sort: 'new', y: 0 }; } catch { return { query: '', kind: 'all', sort: 'new', y: 0 }; } })());
   const [query, setQuery] = useState(saved.current.query);
-  const [subjectId, setSubjectId] = useState<string | null>(saved.current.subjectId);
   const [kind, setKind] = useState<'all' | 'notes' | 'past-paper'>(saved.current.kind);
   const [sort, setSort] = useState<Sort>(saved.current.sort);
-  const [everyClass, setEveryClass] = useState(false);
+  const [everyClass, setEveryClass] = useEveryClass();
   const [classSheet, setClassSheet] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
   const access = useAccess();
@@ -30,7 +30,7 @@ export function HomePage() {
 
   const scrollTo = useRef(saved.current.y);
   useEffect(() => { preloadReader(); }, []);
-  useEffect(() => { try { sessionStorage.setItem('shule_home', JSON.stringify({ query, subjectId, kind, sort, y: window.scrollY })); } catch { /* private mode */ } }, [query, subjectId, kind, sort]);
+  useEffect(() => { try { sessionStorage.setItem('shule_home', JSON.stringify({ query, kind, sort, y: window.scrollY })); } catch { /* private mode */ } }, [query, kind, sort]);
   useEffect(() => {
     const onScroll = () => { try { const cur = JSON.parse(sessionStorage.getItem('shule_home') || '{}'); sessionStorage.setItem('shule_home', JSON.stringify({ ...cur, y: window.scrollY })); } catch { /* ignore */ } };
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -39,19 +39,16 @@ export function HomePage() {
   // Once the notes are on screen, go back to where the student was.
   useLayoutEffect(() => { if (scrollTo.current > 0 && notes.length > 0) { window.scrollTo(0, scrollTo.current); scrollTo.current = 0; } }, [notes.length]);
 
-  const cls = user?.classLevel || null;
-  const knownClasses = useMemo(() => new Set(levels.flatMap((g) => g.levels.map((l) => l.id))), [levels]);
-  // The student's class, notes for every class, and notes whose class is not in the list.
-  const inClass = useMemo(() => notes.filter((n) => everyClass || !cls || !n.classLevel || n.classLevel === cls || !knownClasses.has(n.classLevel)), [notes, cls, everyClass, knownClasses]);
-  const subjectsInScope = useMemo(() => subjects.filter((s) => inClass.some((n) => n.subjectId === s.id)), [subjects, inClass]);
+  // The student's class, notes for every class, and notes whose class is not in the list (shared with a subject's own page).
+  const { cls, inClass, subjectsInScope } = useClassScope(everyClass);
   const hasBoth = new Set(inClass.map((n) => n.kind)).size > 1;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = inClass.filter((n) => (!subjectId || n.subjectId === subjectId) && (kind === 'all' || n.kind === kind)
+    let list = inClass.filter((n) => (kind === 'all' || n.kind === kind)
       && (!q || n.title.toLowerCase().includes(q) || n.description.toLowerCase().includes(q) || (subjectName(n.subjectId) || '').toLowerCase().includes(q)));
     list = [...list].sort(sort === 'az' ? (a, b) => a.title.localeCompare(b.title) : sort === 'views' ? (a, b) => b.views - a.views : (a, b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
     return list;
-  }, [inClass, subjectId, kind, query, sort, subjectName]);
+  }, [inClass, kind, query, sort, subjectName]);
 
   const lastRead = readRecent().map((r) => ({ r, note: notes.find((n) => n.id === r.id) })).find((x) => x.note);
   const hour = new Date().getHours();
@@ -108,13 +105,15 @@ export function HomePage() {
           <Chevron width={22} height={22} /></button>
       )}
 
-      {subjectsInScope.length > 0 && (
-        <><div className="section-head"><h2>Subjects</h2>{subjectId && <button className="chip" onClick={() => setSubjectId(null)}>Show all subjects</button>}</div>
-          <div className="subject-row">
+      {subjectsInScope.length > 0 && !query && (
+        <><div className="section-head"><h2>Subjects</h2><span className="muted count">{subjectsInScope.length} {subjectsInScope.length === 1 ? 'subject' : 'subjects'}</span></div>
+          {/* A grid (matrix), so every subject is in view without sideways scrolling; a tap opens that subject's own page. */}
+          <div className="subject-grid">
             {subjectsInScope.map((s, i) => (
-              <button key={s.id} className={`subject-tile sv rise ${subjectId === s.id ? 'on' : ''}`} style={{ animationDelay: `${Math.min(i, 10) * 35}ms`, ...(subjectVars(s.name) as CSSProperties) }} onClick={() => setSubjectId(subjectId === s.id ? null : s.id)}>
+              <button key={s.id} className="subject-tile sv rise" style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, ...(subjectVars(s.name) as CSSProperties) }} onClick={() => nav(`/subject/${s.id}`)}>
                 <span className="s-ico"><SubjectIcon name={s.name} size={30} /></span>
                 <b>{s.name}</b><small>{countIn(s.id)} {countIn(s.id) === 1 ? 'document' : 'documents'}</small>
+                <Chevron className="s-go" width={18} height={18} />
               </button>
             ))}
           </div></>
@@ -138,7 +137,7 @@ export function HomePage() {
 
       {paySheet && <PaySheet onClose={() => setPaySheet(false)} />}
       {classSheet && <Sheet title="Choose your class" onClose={() => setClassSheet(false)}>
-        {levels.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${cls === l.id ? 'on' : ''}`} onClick={() => { setClass(l.id); setSubjectId(null); setEveryClass(false); setClassSheet(false); }}>{l.name}</button>)}</div></div>)}
+        {levels.map((g) => <div key={g.id} className="level-group"><h4>{g.name}</h4><div className="level-grid">{g.levels.map((l) => <button key={l.id} className={`chip ${cls === l.id ? 'on' : ''}`} onClick={() => { setClass(l.id); setEveryClass(false); setClassSheet(false); }}>{l.name}</button>)}</div></div>)}
       </Sheet>}
     </div>
   );

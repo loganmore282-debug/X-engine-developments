@@ -5,6 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -125,6 +129,7 @@ fun HomeTab(
     onChangeClass: () -> Unit,
     unreadCount: Int,
     onOpenNotifications: () -> Unit,
+    onOpenSubject: (String) -> Unit,
 ) {
     // The header is dark green under the status bar, so its icons must be light.
     StatusBarIcons(light = true)
@@ -252,38 +257,43 @@ fun HomeTab(
                 }
             }
 
-            if (tiles.isNotEmpty() && !viewModel.isLoading) {
-                item(key = "subjects") {
-                    SectionTitle("Subjects", Modifier.padding(top = 22.dp))
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth(),
+            if (tiles.isNotEmpty() && !viewModel.isLoading && !searching) {
+                // The subjects are a grid (a matrix): every subject is in view with no sideways scrolling, and a tap opens
+                // that subject on its own page instead of filtering this list.
+                item(key = "subjects-title") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        item(key = "all") {
-                            SubjectTile(
-                                label = "All",
-                                icon = rememberVectorPainter(Icons.Filled.Apps),
-                                tint = SubjectTint(
-                                    accent = MaterialTheme.colorScheme.primary,
-                                    container = MaterialTheme.colorScheme.primaryContainer,
-                                    coverStart = MaterialTheme.colorScheme.primary,
-                                    coverEnd = MaterialTheme.colorScheme.primary,
-                                    onCover = MaterialTheme.colorScheme.onPrimary,
-                                ),
-                                isSelected = viewModel.selectedSubjectId == null,
-                                onClick = { viewModel.selectSubject(null) },
-                            )
-                        }
-                        items(tiles, key = { it.id }) { subject ->
-                            SubjectTile(
-                                label = subject.name,
+                        Text("Subjects", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            if (tiles.size == 1) "1 subject" else "${tiles.size} subjects",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                val scopedAll = viewModel.scopedNotes()
+                itemsIndexed(tiles.chunked(2), key = { _, pair -> "subjects-" + pair.first().id }) { _, pair ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        pair.forEach { subject ->
+                            SubjectGridTile(
+                                name = subject.name,
+                                count = scopedAll.count { it.subjectId == subject.id },
                                 icon = painterResource(subjectIcon(subject.name)),
                                 tint = subjectTint(subject.id, viewModel.subjects),
-                                isSelected = viewModel.selectedSubjectId == subject.id,
-                                onClick = { viewModel.selectSubject(subject.id) },
+                                onClick = { onOpenSubject(subject.id) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                         }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -675,54 +685,63 @@ private fun ContinueCard(
     }
 }
 
+// One subject as a card: soft colour from its name, its picture, the name (long words shrink to fit, never cut) and how many documents.
 @Composable
-private fun SubjectTile(label: String, icon: Painter, tint: SubjectTint, isSelected: Boolean, onClick: () -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val iconOnAccent = if (dark) Color(0xFF0B0F0D) else Color.White
-    // The longest WORD decides the size of the text: "Entrepreneurship" is shrunk (never below 9.5 sp) until it fits the tile,
-    // so a word is never cut in the middle. Normal names ("Biology") keep the regular size.
-    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val density = LocalDensity.current
-    val baseStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
-    val roomPx = with(density) { 92.dp.roundToPx() }
-    val labelSize = remember(label, baseStyle, roomPx) {
-        val longest = label.split(' ', '-', '/').maxByOrNull { it.length } ?: label
-        var size = if (baseStyle.fontSize.isSp) baseStyle.fontSize.value else 12f
-        while (size > 9.5f && measurer.measure(longest, baseStyle.copy(fontSize = size.sp)).size.width > roomPx) size -= 0.5f
-        size
-    }
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        // Every tile is the SAME width, so a long name ("History & Political Education") wraps under its icon
-        // instead of stretching its tile and leaving uneven gaps between the icons.
-        modifier = Modifier
-            .width(100.dp)
-            .clip(RoundedCornerShape(20.dp))
+private fun SubjectGridTile(
+    name: String,
+    count: Int,
+    icon: Painter,
+    tint: SubjectTint,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(22.dp)
+    // Two cards share the width: (screen - 2 x 20 margin - 12 gap) / 2, less the card's own padding.
+    val tileWidth = ((LocalConfiguration.current.screenWidthDp - 52) / 2).dp
+    val style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+    val size = com.shulenotes.app.ui.components.fitFontSize(name, style, tileWidth - 28.dp, 10f)
+    Box(
+        modifier = modifier
+            .heightIn(min = 132.dp)
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(tint.container, MaterialTheme.colorScheme.surface)))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(onClick = onClick)
-            .semantics { selected = isSelected; role = Role.Tab }
-            .padding(horizontal = 2.dp, vertical = 2.dp),
+            .semantics { role = Role.Button },
     ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (isSelected) tint.accent else tint.container),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = if (isSelected) iconOnAccent else tint.accent, modifier = Modifier.size(34.dp))
+        Column(modifier = Modifier.fillMaxHeight().padding(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = tint.accent, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                name,
+                style = style,
+                fontSize = size.sp,
+                lineHeight = (size + 4f).sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                if (count == 1) "1 document" else "$count documents",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            fontSize = labelSize.sp,
-            lineHeight = (labelSize + 3f).sp,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).padding(bottom = 2.dp),
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = tint.accent.copy(alpha = 0.75f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 10.dp).size(22.dp),
         )
     }
 }

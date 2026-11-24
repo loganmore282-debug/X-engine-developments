@@ -312,6 +312,11 @@ Android reads the reason in `ApiClient` (`SessionHolder.expiredMessage`); the we
 - Long names must never be cut mid-word (owner: "Entrepreneurship Education", the Ask AI title): subject tiles are one size (156 px on phones, text wraps/hyphenates, 3 lines),
   the Ask AI drawer says "Study helper" with the document title under it (2 lines), note cards allow 3 title lines, the reader title wraps to 2 lines. Android `SubjectTile` shrinks the
   text (min 9.5 sp, measured with `rememberTextMeasurer`) until its longest word fits. e2e mock data (`web/e2e/mock-server.cjs`) deliberately contains long subject names and a long title: keep them.
+- Subjects are a GRID (owner: "some students fail to see other subjects", "he has to scroll down to see the PDF"): Home shows every subject as a 2-column card grid
+  (3 / 4 columns wider; hidden while searching) and a tap opens the subject's OWN page: web `/subject/:id` (`src/pages/Subject.tsx`, shared class rule in `src/scope.ts`),
+  Android `SubjectScreen.kt` (an overlay in `MainScreen` that slides in; the phone's Back button closes it). The page has Back, a coloured header (icon, name, counts), a search that
+  only looks inside the subject, Notes/Exams chips, sort, then the documents. Home no longer filters by subject (`selectedSubjectId` in LibraryViewModel is now unused by Home).
+  NOTE: `ci/capture.py` (the emulator walkthrough) is out of date with the app (it still looks for the old announcement card, "Past papers" and the subject tiles) and needs a rewrite.
 - Website on phones has NO top bar (owner: "like an app", like the competitor): Home starts with our logo + wordmark top left and the bell top right (`.m-top`, `useUnread` in `src/unread.ts`), above the green hero. Admin panel on phones: the Students, Payments, Notes and Activity lists become labelled cards (`.table-scroll.cards` + `labelTables()` copies each column heading into `data-label`), so no column or button is cut off,
   the inbox has a Back button; desktop keeps the top bar with nav links.
 

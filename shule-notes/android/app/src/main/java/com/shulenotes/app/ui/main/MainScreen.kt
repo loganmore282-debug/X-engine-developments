@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -77,6 +78,10 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     var seenAtOnOpen by rememberSaveable { mutableStateOf(0L) }
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var showPayments by rememberSaveable { mutableStateOf(false) }
+    // The subject whose own page is open (tapped in the grid on Home). The last one is kept while the page slides away.
+    var openSubjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastSubjectId by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(openSubjectId) { if (openSubjectId != null) lastSubjectId = openSubjectId }
     val studyPages by ShuleApp.session.studyPages.collectAsState(initial = emptySet())
     val finishedNotes by ShuleApp.session.finishedNotes.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
@@ -120,6 +125,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
     BackHandler(enabled = showNotifications) { showNotifications = false }
     BackHandler(enabled = showProgress) { showProgress = false }
     BackHandler(enabled = showPayments) { showPayments = false }
+    BackHandler(enabled = openSubjectId != null) { openSubjectId = null }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
@@ -167,6 +173,7 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
                 onOpenProfile = { tab = 2 },
                 onChangeClass = { showClassSheet = true },
                 unreadCount = unread,
+                onOpenSubject = { openSubjectId = it },
                 onOpenNotifications = {
                     seenAtOnOpen = if (seenAt == Long.MAX_VALUE) 0L else seenAt
                     showNotifications = true
@@ -200,6 +207,26 @@ fun MainScreen(viewModel: LibraryViewModel, onOpenNote: (String) -> Unit, onOpen
 
     if (showPayments) {
         PaymentsScreen(onBack = { showPayments = false })
+    }
+
+    // A subject's own page slides in over Home, and slides back out on Back (the phone's Back button works too).
+    androidx.compose.animation.AnimatedVisibility(
+        visible = openSubjectId != null,
+        enter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(280)) { it / 5 } +
+            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)),
+        exit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { it / 5 } +
+            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)),
+    ) {
+        val shownId = openSubjectId ?: lastSubjectId
+        if (shownId != null) {
+            SubjectScreen(
+                subjectId = shownId,
+                viewModel = viewModel,
+                savedIds = savedIds,
+                onOpenNote = onOpenNote,
+                onBack = { openSubjectId = null },
+            )
+        }
     }
 
     if (showNotifications) {

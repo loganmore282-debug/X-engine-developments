@@ -60,7 +60,13 @@ fs.mkdirSync('e2e-shots', { recursive: true });
   await dp.goto(BASE + '/'); await dp.waitForSelector('text=Welcome back'); await shot(dp, '08b-desktop-sign-in');
   await dp.fill('input[inputmode=tel]', '0772123456'); await dp.fill('input[type=password]', 'study2026'); await dp.click('button:has-text("Sign in")');
   await dp.waitForSelector('.note-card'); await shot(dp, '08-desktop-home');
-  await dp.click('.subject-tile >> nth=0'); await shot(dp, '08c-desktop-subject');
+  // Subjects are a grid; a tap opens that subject's own page (its documents first), and Back returns to Home.
+  if ((await dp.locator('.subject-grid .subject-tile').count()) < 2) problems.push('the subject grid has fewer than 2 tiles');
+  await dp.click('.subject-tile >> nth=0'); await dp.waitForSelector('.subject-hero'); await dp.waitForSelector('.subject-hero ~ .grid .note-card, .subject-hero ~ .empty');
+  if (!/\/subject\//.test(dp.url())) problems.push('a subject tile did not open its own page');
+  await shot(dp, '08c-desktop-subject');
+  await dp.click('.subject-hero .back-btn'); await dp.waitForSelector('.subject-grid');
+  if (/\/subject\//.test(dp.url())) problems.push('Back from a subject page stayed on it');
   await dp.click('.note-card >> nth=0'); await dp.waitForSelector('.sheet-page canvas', { timeout: 20000 }); await dp.waitForTimeout(1200); await shot(dp, '08d-desktop-reader');
   await dp.keyboard.press('ArrowRight'); await dp.waitForFunction(() => /Page 2 of/.test(document.querySelector('.reader-top')?.textContent || ''), null, { timeout: 8000 });
   await dp.keyboard.press('/'); await dp.waitForSelector('.drawer input'); await dp.keyboard.press('Escape'); await dp.waitForSelector('.drawer', { state: 'detached' });

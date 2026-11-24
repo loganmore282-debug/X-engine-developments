@@ -8,6 +8,7 @@ import { InboxPage, ProfilePage, SavedPage, applyTheme, PaymentsPage } from './p
 const ReaderPage = lazy(() => import('./pages/Reader').then((m) => ({ default: m.ReaderPage })));
 import { Bell, Bookmark, BookmarkFilled, Close, Campaign, Home as HomeIcon, HomeFilled, User as UserIcon, UserFilled } from './icons';
 import { ProgressPage } from './pages/Progress';
+import { SubjectPage } from './pages/Subject';
 import { useUnread } from './unread';
 import { API } from './api';
 
@@ -80,7 +81,7 @@ function Shell() {
         <a href={`${API}/download/`}>Get the Android app</a><Link to="/profile">Help and support</Link><a href={`${API}/privacy`} target="_blank" rel="noreferrer">Privacy</a><a href={`${API}/terms`} target="_blank" rel="noreferrer">Terms</a>
       </div></footer>
       <nav className="bottom-nav">
-        <NavLink to="/" end>{({ isActive }) => <>{isActive ? <HomeFilled /> : <HomeIcon />}Home</>}</NavLink>
+        <NavLink to="/" end className={({ isActive }) => (isActive || location.pathname.startsWith('/subject/') ? 'active' : '')}>{({ isActive }) => { const on = isActive || location.pathname.startsWith('/subject/'); return <>{on ? <HomeFilled /> : <HomeIcon />}Home</>; }}</NavLink>
         <NavLink to="/saved">{({ isActive }) => <>{isActive ? <BookmarkFilled /> : <Bookmark />}Saved</>}</NavLink>
         <NavLink to="/profile">{({ isActive }) => <>{isActive ? <UserFilled /> : <UserIcon />}Profile</>}</NavLink>
       </nav>
@@ -110,6 +111,7 @@ function Gate() {
         <Route path="/saved" element={<SavedPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/subject/:id" element={<SubjectPage />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/payments" element={<PaymentsPage />} />
       </Route>
