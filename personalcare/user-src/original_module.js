@@ -3539,6 +3539,18 @@ function fmtCountdown(ms, toMidnight){
   const pad = n => String(n).padStart(2, '0');
   return pad(h) + ':' + pad(m) + ':' + pad(s);
 }
+// The settlement countdown of a product bought under the hourly / Locking rule: the real time left, never capped. Over a day it reads
+// "6d 23:59:59" (a Locking product can be days away from its release); under a day it is HH:MM:SS. Whole seconds rounded UP, so the last
+// second reads 00:00:01 and never a stuck 00:00:00. Older products keep the midnight style above.
+function fmtPayLeft(ms, long){
+  if (!long) return fmtCountdown(ms, true);
+  let s = Math.max(0, Math.ceil(Number(ms) / 1000));
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  const pad = n => String(n).padStart(2, '0');
+  return (d > 0 ? d + 'd ' : '') + pad(h) + ':' + pad(m) + ':' + pad(s);
+}
 // One timer for every scheduled card on screen. Cleared and restarted by
 // whichever screen paints them, the same shape startPlanCountdowns() uses.
 // When a card's moment arrives it re-fetches the catalog once, so the button
@@ -3620,7 +3632,7 @@ function vOwnedCardHtml(inv){
       </dl>
       <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}${invCategory(inv) === 'wage' && !st.matured ? '<i class="ck-oc-wmul"></i>' : ''}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? (st.newRule ? (st.matured ? '<br>Released' : '<br>Locked') : '<br>Free') : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
-    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${nextPayoutMs(inv)}">${fmtCountdown(nextPayoutMs(inv) - ckNow(), true)}</b></div>`}
+    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${nextPayoutMs(inv)}"${st.newRule ? ' data-long="1"' : ''}>${fmtPayLeft(nextPayoutMs(inv) - ckNow(), st.newRule)}</b></div>`}
   </article>`;
 }
 // The settlement countdown on each running card ticks every second; when one reaches zero the list is read again (the payout has just landed).
@@ -3635,7 +3647,7 @@ function startIncomeCountdowns(){
     let due = false, soonest = Infinity;
     nodes.forEach(el => {
       const left = Number(el.getAttribute('data-pay-at')) - now;
-      el.textContent = fmtCountdown(left, true);
+      el.textContent = fmtPayLeft(left, el.getAttribute('data-long') === '1');
       // At zero the list is read again after a moment (the payment lands within a second of the due time); if it has not landed yet it is
       // read again every 3 seconds, up to 8 times, so a card never stays stuck at 00:00:00.
       if (left <= 0) { const tries = Number(el.dataset.tries) || 0, last = Number(el.dataset.last) || 0; if (tries < 8 && now - last >= (tries ? 3000 : 0)) { el.dataset.tries = String(tries + 1); el.dataset.last = String(now); due = true; } }

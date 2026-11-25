@@ -9,7 +9,7 @@ const DAY = 86400000;
 function load(offMin) {
   const c = { REGION: { utcOffsetMin: offMin }, Date, Math, Number, String };
   vm.createContext(c);
-  vm.runInContext([grab('tzOffMs'), sync, grab('nextMidnightMs'), grab('nextPayoutMs'), grab('fmtCountdown')].join('\n'), c);
+  vm.runInContext([grab('tzOffMs'), sync, grab('nextMidnightMs'), grab('nextPayoutMs'), grab('fmtCountdown'), grab('fmtPayLeft')].join('\n'), c);
   return c;
 }
 // 1. every region offset, hundreds of instants: the target is a real local midnight, never more than a day away, never in the past
@@ -52,7 +52,7 @@ ok(/serverNow: Date\.now\(\)/.test(server), 'the investments list carries the se
 ok(/r\.serverNow === 'number'\) ckSyncClock/.test(mod), 'every investments answer re-syncs the phone against the server');
 ok(/const left = Number\(el\.getAttribute\('data-pay-at'\)\) - now/.test(mod) && !/Date\.now\(\)\s*-\s*Number\(el/.test(mod), 'the countdown never reads the phone clock directly');
 ok(/setTimeout\(tick, \(\(isFinite\(soonest\) \? soonest % 1000 : 0\) \|\| 1000\) \+ 15\)/.test(mod), 'it ticks on the second boundary');
-ok(/fmtCountdown\(nextPayoutMs\(inv\) - ckNow\(\), true\)/.test(mod), 'the first figure on a card uses the same rule as the ticks');
+ok(/fmtPayLeft\(nextPayoutMs\(inv\) - ckNow\(\), st\.newRule\)/.test(mod) && /fmtPayLeft\(left, el\.getAttribute\('data-long'\) === '1'\)/.test(mod), 'the first figure on a card uses the same rule as the ticks');
 ok(/left <= 0/.test(mod) && /api\('\/investments'\)/.test(mod), 'when a payment falls due the list is read again so the cashback shows');
 // 5. cashback every 24 hours: the countdown runs to this product's next payment
 {
@@ -63,5 +63,18 @@ ok(/left <= 0/.test(mod) && /api\('\/investments'\)/.test(mod), 'when a payment 
   ok(c.nextPayoutMs({ payoutFirstAt: iso, payoutsMade: 3 }, now) === first + 3 * DAY, 'three payments made: first + 3 days');
   ok(c.nextPayoutMs({ payoutsMade: 2 }, now) === c.nextMidnightMs(now), 'a product bought before this rule still counts to midnight');
   const bought = now; ok(c.fmtCountdown(bought + DAY - now, true) === '23:59:59', 'a product bought this second reads 23:59:59');
+}
+// 3. the new hourly / Locking rule: the real time left, never capped at 23:59:59; days shown once there are any
+{
+  const c = load(180), H = 3600000;
+  ok(c.fmtPayLeft(7 * DAY, true) === '7d 00:00:00', 'a Locking product 7 days from release reads 7d 00:00:00, not a stuck 23:59:59');
+  ok(c.fmtPayLeft(7 * DAY - 1000, true) === '6d 23:59:59' && c.fmtPayLeft(7 * DAY - 2000, true) === '6d 23:59:58', 'and it counts down every second');
+  ok(c.fmtPayLeft(DAY + 3661000, true) === '1d 01:01:01', 'one day and a bit');
+  ok(c.fmtPayLeft(DAY, true) === '1d 00:00:00' && c.fmtPayLeft(DAY - 1000, true) === '23:59:59', 'under a day it is plain HH:MM:SS');
+  ok(c.fmtPayLeft(H, true) === '01:00:00' && c.fmtPayLeft(1, true) === '00:00:01' && c.fmtPayLeft(0, true) === '00:00:00' && c.fmtPayLeft(-5, true) === '00:00:00', 'an hourly share: an hour down to the last second, never negative');
+  ok(c.fmtPayLeft(DAY, false) === '23:59:59', 'an older product keeps the midnight style');
+  const first = Date.UTC(2026, 10, 25, 12, 0, 0);
+  ok(c.nextPayoutMs({ payoutFirstAt: new Date(first).toISOString(), payoutsMade: 5, periodMs: H }, first) === first + 5 * H, 'an hourly product counts to the next hour after the shares made');
+  ok(c.nextPayoutMs({ payoutFirstAt: new Date(first).toISOString(), payoutsMade: 0, periodMs: 7 * DAY }, first - 3 * H) === first, 'a Locking product counts to its release');
 }
 console.log('PASS: settlement countdown (' + n + ' checks)');
