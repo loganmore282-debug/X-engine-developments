@@ -1900,6 +1900,7 @@ function hideLoadingScreen(){
   const done = () => {
     try { if (typeof window._ckLoaderDone === 'function') window._ckLoaderDone(); } catch (_) {}
     // The loading screen fades away instead of vanishing.
+    window._ldEverHidden = true;
     ls.classList.add('ld-out');
     if (_ldOutTimer) clearTimeout(_ldOutTimer);
     _ldOutTimer = setTimeout(() => { _ldOutTimer = null; ls.style.display = 'none'; ls.classList.remove('ld-out'); }, 300);
@@ -1918,8 +1919,9 @@ function showLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
   if (_ldOutTimer) { clearTimeout(_ldOutTimer); _ldOutTimer = null; }
   $('loadingScreen').classList.remove('ld-out');
-  // The start-up video plays only once, at launch: a loading screen shown again later is the ordinary one.
-  $('loadingScreen').classList.remove('has-video', 'vid-done');
+  // The start-up video plays only once, at launch. The app asks for the loading screen again about two seconds into a signed-in start (right after the
+  // sign-in answer): that is still the LAUNCH screen and must keep the video. Only a loading screen shown after it has once been taken down is the ordinary one.
+  { const vs = window._ldVid; if (window._ldEverHidden || !vs || !(vs.state === 'pending' || vs.state === 'playing' || vs.state === 'ended')) $('loadingScreen').classList.remove('has-video', 'vid-on', 'vid-done'); }
   $('loadingScreen').style.display = 'flex';
 }
 // A page's blocks (cards, tabs, lists, rows) fade in and rise about 22 px one after another, the way the owner's recording shows.

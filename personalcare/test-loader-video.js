@@ -84,7 +84,17 @@ const call = async (key, req) => { const r = res(); await routes[key](Object.ass
     g.c2.window._ldVid.state = 'failed'; await sleep(400); ok(gone(g), 'a video that failed lets the screen go at once'); }
   { const g = mk({ state: 'none', endsAt: 0 }); g.c2.hide(); await sleep(60); ok(gone(g), 'with no video the screen goes as before'); }
   { const g = mk(undefined); g.c2.hide(); await sleep(60); ok(gone(g), 'an older page without the video script goes as before'); }
-  ok(/classList\.remove\('has-video', 'vid-done'\)/.test(mod.slice(mod.indexOf('function showLoadingScreen(){'), mod.indexOf('function showLoadingScreen(){') + 700)), 'a loading screen shown again later is the ordinary one');
+  // showLoadingScreen(): the app asks for the loading screen again about two seconds into a signed-in start; that must NOT swap the video for the ordinary loader
+  { const sa = mod.indexOf('function showLoadingScreen(){'), sb = mod.indexOf('// A page\'s blocks (cards, tabs, lists, rows) fade in', sa);
+    const show = (vid, hidden) => { const cls = new Set(['has-video', 'vid-on', 'vid-done']); const el = { style: { display: 'none' }, classList: { add: x => cls.add(x), remove: (...xs) => xs.forEach(x => cls.delete(x)), contains: x => cls.has(x) } };
+      const c3 = { $: () => el, _ldTimer: null, _ldOutTimer: null, clearTimeout, window: { _ldVid: vid, _ldEverHidden: hidden }, console }; vm.createContext(c3);
+      vm.runInContext('var _ldTimer = null, _ldOutTimer = null;\n' + mod.slice(sa, sb) + '\nshowLoadingScreen();', c3); return { cls, el }; };
+    for (const st of ['pending', 'playing', 'ended']) { const g = show({ state: st }, false); ok(g.cls.has('has-video') && g.cls.has('vid-on') && g.el.style.display === 'flex', 'at launch, a "show the loading screen" while the video is ' + st + ' keeps the video (this swapped it for the ordinary loader before)'); }
+    let g = show({ state: 'failed' }, false); ok(!g.cls.has('has-video') && !g.cls.has('vid-on'), 'a video that failed does not stay');
+    g = show(undefined, false); ok(!g.cls.has('has-video'), 'no video: nothing kept');
+    g = show({ state: 'ended' }, true); ok(!g.cls.has('has-video') && !g.cls.has('vid-on') && !g.cls.has('vid-done'), 'a loading screen shown after the launch one has gone is the ordinary one'); }
+  ok(/window\._ldEverHidden = true;/.test(mod), 'the launch screen being taken down is remembered');
+  ok(/#loadingScreen \.ld-vid\{[^}]*visibility:hidden;opacity:0;transition:opacity \.45s ease/.test(idx) && /#loadingScreen\.vid-on \.ld-vid\{visibility:visible;opacity:1;\}/.test(idx) && /ls\.classList\.add\('vid-on'\)/.test(idx), 'the video fades in (no sudden pop)');
   // the admin panel
   ok(/Start-up video/.test(adm) && /id="lvFile" accept="video\/mp4,video\/webm"/.test(adm) && /id="lvClear"/.test(adm) && /\/admin\/loader-video\/set/.test(adm) && /\/admin\/loader-video\/clear/.test(adm), 'Admin > Banners has the Start-up video card (upload, replace, remove)');
   ok(/probe\.duration > 15/.test(adm) && /10\*1024\*1024/.test(adm) && /body: f,/.test(adm), 'the panel checks size and length and plays the file before sending it raw');

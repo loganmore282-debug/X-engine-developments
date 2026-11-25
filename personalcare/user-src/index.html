@@ -350,9 +350,9 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#00329d 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
 /* ── START-UP VIDEO (Admin > Banners > Start-up video): fills the whole screen, plays by itself, cannot be touched or paused. Shown only while it is playing; if it cannot play, the usual loader stays. ── */
-#loadingScreen .ld-vid{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;background:#000;pointer-events:none;z-index:1;-webkit-user-select:none;user-select:none;}
+#loadingScreen .ld-vid{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;visibility:hidden;opacity:0;transition:opacity .45s ease;background:#000;pointer-events:none;z-index:1;-webkit-user-select:none;user-select:none;}
+#loadingScreen.vid-on .ld-vid{visibility:visible;opacity:1;}
 #loadingScreen.has-video{background:#000 !important;}
-#loadingScreen.has-video .ld-vid{display:block;}
 #loadingScreen.has-video .ld-bg,#loadingScreen.has-video .ld-bar,#loadingScreen.has-video .ld-pct,#loadingScreen.has-video .ld-txt,#loadingScreen.has-video .ld-spin,#loadingScreen.has-video .ld-ring{display:none !important;}
 /* when the video has ended and the app is still opening, a small ring at the bottom shows it is still working */
 #loadingScreen.has-video.vid-done .ld-ring{display:block !important;position:absolute;top:auto !important;bottom:calc(9% + env(safe-area-inset-bottom,0px));left:50%;width:38px !important;height:38px !important;margin-left:-19px !important;border-width:3px;border-color:rgba(255,255,255,.25) !important;border-top-color:#fff !important;z-index:3;}
@@ -2572,13 +2572,17 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
     try { ver = localStorage.getItem(VK) || ''; } catch (e) {}
     function fail(){
       if (st.state === 'failed' || st.state === 'ended') return;
-      st.state = 'failed'; ls.classList.remove('has-video', 'vid-done');
+      st.state = 'failed'; ls.classList.remove('has-video', 'vid-on', 'vid-done');
       try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
     }
     v.muted = true; v.defaultMuted = true; v.loop = false;
     v.addEventListener('playing', function(){
       if (st.state === 'failed' || st.state === 'ended') return;
-      st.state = 'playing'; ls.classList.add('has-video');
+      st.state = 'playing';
+      /* the picture fades in over whatever is showing; once it covers it, the loader's own parts are taken away (no sudden swap) */
+      ls.classList.add('vid-on');
+      if (ls.classList.contains('has-video')) { /* a remembered video: the black base was there from the first frame */ }
+      else setTimeout(function(){ if (st.state === 'playing' || st.state === 'ended') ls.classList.add('has-video'); }, 480);
       var left = isFinite(v.duration) ? Math.max(0, v.duration - v.currentTime) : 3;
       st.endsAt = Date.now() + Math.min(8, left) * 1000 + 150;
     });
