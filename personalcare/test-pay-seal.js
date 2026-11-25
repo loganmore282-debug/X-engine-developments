@@ -52,6 +52,6 @@ const fnSrc = name => { const n = tree.body.find(x => x.type === 'FunctionDeclar
   // the route: sealed in, sealed out; over HTTPS a plain request is refused; the form asks for number and provider by hand
   assert.ok(/req\.body && req\.body\.sealed/.test(server) && /else if \(req\.secure\)/.test(server) && /SEAL_REQUIRED/.test(server), 'plain requests are refused over HTTPS');
   assert.ok(/pgSealedPost\('\/deposit\/marzpay'/.test(src), 'the app pays through the sealed call');
-  assert.ok(/id="pgPhone"[^>]*value=""[^>]*required/.test(src) && /reportValidity/.test(src) && /id="pgNet" required/.test(src), 'number typed by hand (empty gets the browser\'s "Please fill out this field."), provider picked from the list (a required select)');
+  assert.ok(/id="depPhone"[^>]*placeholder="e\.g\. 0700 000 000"/.test(src) && /id="depNets"/.test(src) && /Please choose MTN Mobile Money or Airtel Money/.test(src), 'the number is typed on the Deposit page and the provider is picked there (asked for when it cannot be told from the number)');
   console.log('PASS: sealed payment request (encrypted, replay-proof, answer sealed, HTTPS needs it)');
 })().catch(e => { console.error(e); process.exit(1); });

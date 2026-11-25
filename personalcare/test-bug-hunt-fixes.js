@@ -32,8 +32,8 @@ ok(/limit\(2\)\.get\(\);\s*if \(!depQ\.empty\) \{/.test(server) && /const sameTx
   ok(l[0].after === 20415.5 && l[1].after === 20415.5 && l[2].after === 16415.5, 'a deposit still waiting for payment is not taken off the balances of the rows below it (' + l.map(x => x.after) + ')');
   const c2 = vm.createContext({ numGroup: undefined }); vm.runInContext(mfn('numGroup') + '\n' + mfn('ckTile'), c2);
   ok(c2.ckTile(20415.5) === '20,415.50' && c2.ckTile(30000) === '30,000' && c2.ckTile(0.4) === '0.40', 'Account tiles keep cents (20,415.50), whole amounts stay whole');
-  ok(/window\.pgRefresh = async function\(\)\{[^}]*#pgPayBtn\.pg-busy/.test(mod.replace(/\n/g, ' ')), 'pulling down does not cancel a Pay that is in flight');
-  ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq === seq\);/.test(mod) && /if \(!leaving\) return;/.test(mod), 'the payment page does not open if the member backed out of Deposit while the order was being made');
+  ok(!/pgRefresh|pgLoadOrder|ptrPaint/.test(mod) && !/id="pgPtr"/.test(R('user-src/index.html')), 'the separate payment page is gone: no order page, no pull-down refresh');
+  ok(/const seq = window\._sheetSeq;/.test(mod) && /window\._sheetSeq === seq\)\) \{ refreshTransactionsCache\(\)/.test(mod), 'the polling screen does not open if the member backed out of Deposit while the prompt was being sent');
   ok(/btn\.textContent = 'Confirm';\n  if \(r\.stale\) return;\n  if \(r\.status !== 'success'\) return notify\(r\.message \|\| 'Could not save your wallet\.'\)/.test(mod) && !/textContent = 'Change Password'/.test(mod) && !/textContent = 'Submit'/.test(mod), 'the Confirm buttons keep their label after a failed save');
   ok(mod.includes("history.replaceState(history.state, '', '/')") && mod.includes('payment\\//.test(location.pathname)'), 'a session that ends on the payment address returns the address bar to /'); }
 // deploy / security
@@ -91,10 +91,10 @@ ok(/function logSafe\(v\)/.test(server) && /logSafe\(body\.reference\)/.test(ser
 ok((server.match(/Public route error:/g) || []).length === 6 && !/app\.get\('\/public[^\n]*\n[^\n]*message: e\.message/.test(server), 'public routes never send a driver message');
 for (const f of ['deploy/update-vps.sh', 'deploy/first-setup.sh', 'deploy/webhook-check.sh', 'deploy/deploy.sh', 'deploy/set-wildcard.sh', 'deploy/set-domain.sh', 'deploy/change-app-host.sh']) cp.execFileSync('bash', ['-n', __dirname + '/' + f]);
 // round 2
-ok(/<select class="pg-in" id="pgNet" required><option value="" selected disabled hidden>Select provider<\/option><option value="MTN Mobile Money">/.test(R('user-src/original_module.js')) && /if \(netBox && !netBox\.value\) \{ netBox\.focus\(\); if \(netBox\.reportValidity\)/.test(R('user-src/original_module.js')), 'the payment page picks no provider by default and asks for one');
+ok(/placeholder="e\.g\. 0700 000 000"/.test(R('user-src/original_module.js')) && /Please choose MTN Mobile Money or Airtel Money/.test(R('user-src/original_module.js')) && /function depNetFor\(raw\)/.test(R('user-src/original_module.js')), 'the Deposit page has the deposit number, picks the provider from its first digits and asks when it cannot tell');
 { const u = R('user-src/original_module.js'), h = R('user-src/index.html');
-  ok(/redirectTo\('\/payment\/' \+ no, true,/.test(u) && /location\.assign\(path\)/.test(u), 'Pay sends the browser to /payment/<order> as a real redirect');
-  ok(/window\.pgHome = function\(\)\{ redirectTo\('\/', false,/.test(u), 'Back to Home (and the success hand-off) is a real redirect to /');
+  ok(/pgSealedPost\('\/deposit\/marzpay', \{ amount, phone, network \}\)/.test(u) && /openDepositPolling\(r\.depositId, r\.reference \|\| ''\)/.test(u) && !/redirectTo\(|\/deposit\/order\/create/.test(u), 'Pay starts the payment straight from the Deposit page (number and provider typed there) and opens the polling screen, with no order page');
+  ok(/window\.pgHome = function\(\)\{\s*closePaymentPage\(\);\s*try \{ navigatePage\('home'\)/.test(u), 'Back to Home (and the success hand-off) closes the polling screen, goes Home and reads the balance again');
   ok(/Your payment is detected automatically\. You do not need to refresh or press anything\./.test(u) && /#payScreen \.pg-auto\{/.test(h), 'the Payment Initiated page says it is detected automatically');
   ok(/var PG_SPINNER = /.test(u) && /ico\.outerHTML = PG_SPINNER;\s*\}, 2000\)/.test(u) && /_pg\.view !== 'initiated'\) return;/.test(u) && /#payScreen \.pg-sp\{[^}]*steps\(12,end\)/.test(h), 'Payment Initiated shows the tick for 2 seconds, then the twelve-blade loader takes its place (polling is not delayed)'); }
 ok(!/firstPurchaseCashbackNow/.test(server) && !/sFirstCash/.test(R('admin-src/index.html')), 'the old first-purchase-pays-at-once switch is gone (every purchase follows its own hourly / Locking schedule)');
@@ -104,7 +104,7 @@ ok(!/firstPurchaseCashbackNow/.test(server) && !/sFirstCash/.test(R('admin-src/i
   ok(/together cannot be more than 100 percent/.test(server), 'the three level rewards cannot add up to more than 100 percent');
   ok(/reason = textOf\(req\.body\.reason\)\.slice\(0, 200\)/.test(server) && /action must be ban or unban/.test(server.slice(server.indexOf("app.post('/admin/ban'"), server.indexOf("app.post('/admin/ban'") + 800)), 'ban needs an explicit action'); }
 { const u = R('user-src/original_module.js'), h = R('user-src/index.html'), a = R('admin-src/index.html');
-  ok(/expiresAtLocal/.test(u) && /msLeft/.test(server), 'the payment clock counts from this phone\'s own clock plus the seconds left the server sent');
+  ok(!/expiresAtLocal/.test(u), 'the member app has no order countdown any more (the payment starts straight from the Deposit page)');
   ok(/_buying/.test(u) && !/\[\\s,\]/.test(u.replace(/\[\\\\s,\]/g, '')), 'buy is not entered twice');
   ok(/overflow-wrap:\s*anywhere|overflow-wrap:anywhere/.test(h), 'long words wrap inside messages');
   ok(/fill/.test(a) && /\+03:00/.test(a), 'admin: white behind transparent logos and Uganda time for product opening'); }

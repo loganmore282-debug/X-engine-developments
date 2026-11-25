@@ -2012,6 +2012,14 @@ body{background-attachment:fixed;}
 .ck-amtbox>b{color:#00329d;font-size:14.5px;font-weight:700;white-space:nowrap;}
 .ck-amtbox input{flex:1;min-width:0;height:44px;padding:0;border:0;outline:0;background:transparent;font:700 19px Roboto,'Segoe UI',system-ui,sans-serif;color:#00329d;}
 .ck-amtbox input::placeholder{color:#7a7a7c;font-weight:700;font-size:17.2px;}
+.ck-numcard{margin-top:15px;padding:16px 15px 14px;}
+.ck-numlbl{display:block;font:700 15px Roboto,'Segoe UI',system-ui,sans-serif;color:#1c2540;}
+.ck-numbox{margin-top:11px;}
+.ck-numbox input{font-size:18px;letter-spacing:.2px;}
+.ck-nets{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px;}
+.ck-nets button{display:flex;align-items:center;justify-content:center;height:42px;padding:0 8px;border:0;border-radius:21px;background:#eef5fd;color:#1253c2;font:700 14px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;}
+.ck-nets button.on{background:var(--ck-grad);color:#fff;}
+.ck-numnote{margin:11px 2px 0;font:400 12.5px Roboto,'Segoe UI',system-ui,sans-serif;color:#6b7390;}
 .ck-pays{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px;padding:15px;}
 .ck-pays button{position:relative;display:flex;align-items:center;justify-content:center;height:45px;padding:0 8px;border:0;border-radius:23px;background:#eef5fd;color:#1253c2;font:700 15px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;}
 .ck-pays button.on{background:var(--ck-grad);color:#fff;}
@@ -2632,7 +2640,7 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
 </div>
 
-<div id="payScreen" aria-hidden="true"><div class="pg-ptr" id="pgPtr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4.5a7.5 7.5 0 1 0 7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M12 1.2l3.6 3.3L12 7.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="pg-wrap" id="pgBody"></div></div>
+<div id="payScreen" aria-hidden="true"><div class="pg-wrap" id="pgBody"></div></div>
 
 <div id="maintScreen" role="alert">
   <div class="mt-wrap">

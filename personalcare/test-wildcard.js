@@ -55,7 +55,7 @@ assert.ok(/--cert-name personalcare-wild/.test(sw) && /hostinger-dns\.js/.test(s
   assert.ok(/https:\/\/app\.example\.org\/\n/.test(out) && /https:\/\/a1b2c3\.example\.org\/Bake7qz3\//.test(out) && /Payload URL : https:\/\/app\.example\.org\/k7x2\/deploy\/webhook/.test(out) && /Secret      : sec123/.test(out) && /\/k7x2\/h-abcdef0123456789\/pesajet/.test(out), 'show-links prints app, admin, GitHub webhook and PesaJet webhook');
   fs.rmSync(d, { recursive: true, force: true }); }
 // the payment phone box does not trigger the browser's saved-password sheet
-assert.ok(/id="pgPhone" name="pg_msisdn" type="text"[^>]*autocomplete="off"/.test(src) && /function pgLockPasswordBoxes/.test(src), 'no password prompt on the phone box');
+assert.ok(/id="depPhone" name="dep_msisdn" type="text"[^>]*autocomplete="off"/.test(src) && /function pgLockPasswordBoxes/.test(src), 'no password prompt on the phone box');
 console.log('PASS: random invite addresses (new every time, wildcard nginx + certificate, scripts) and no password prompt on the payment phone box');
 
 // Hostinger DNS helper, against a fake of Hostinger's API: it changes ONE name+type per call and sends the token as a Bearer header
