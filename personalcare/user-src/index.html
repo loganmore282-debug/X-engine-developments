@@ -349,6 +349,13 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#00329d 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
+/* ── START-UP VIDEO (Admin > Banners > Start-up video): fills the whole screen, plays by itself, cannot be touched or paused. Shown only while it is playing; if it cannot play, the usual loader stays. ── */
+#loadingScreen .ld-vid{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:none;background:#000;pointer-events:none;z-index:1;-webkit-user-select:none;user-select:none;}
+#loadingScreen.has-video{background:#000 !important;}
+#loadingScreen.has-video .ld-vid{display:block;}
+#loadingScreen.has-video .ld-bg,#loadingScreen.has-video .ld-bar,#loadingScreen.has-video .ld-pct,#loadingScreen.has-video .ld-txt,#loadingScreen.has-video .ld-spin,#loadingScreen.has-video .ld-ring{display:none !important;}
+/* when the video has ended and the app is still opening, a small ring at the bottom shows it is still working */
+#loadingScreen.has-video.vid-done .ld-ring{display:block !important;position:absolute;top:auto !important;bottom:calc(9% + env(safe-area-inset-bottom,0px));left:50%;width:38px !important;height:38px !important;margin-left:-19px !important;border-width:3px;border-color:rgba(255,255,255,.25) !important;border-top-color:#fff !important;z-index:3;}
 /* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
 #loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
 #loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
@@ -2525,6 +2532,7 @@ window.createPersonalCareIdleSession = function(key, onExpire, onActivity){
 window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)return;var show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-label',show?'Hide password':'Show password');var a=b.querySelector('.eye-off'),c=b.querySelector('.eye-on');if(a)a.style.display=show?'none':'';if(c)c.style.display=show?'':'none';};
 </script>
 <div id="loadingScreen">
+  <video id="ldVideo" class="ld-vid" muted playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback" aria-hidden="true" tabindex="-1"></video>
   <span class="ld-bg" id="ldBg" aria-hidden="true"></span>
   <span class="ld-ring" aria-hidden="true"></span>
   <span class="ld-bar" aria-hidden="true"><i id="ldFill"></i></span>
@@ -2550,6 +2558,54 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
       set(96 * (1 - Math.exp(-e / 1.6)));
     }, 120);
     set(2);
+  })();
+  /* THE START-UP VIDEO. Remembered per device (a version number), so every launch after the first starts the video from the phone's own cache in
+     the first moments. No remembered version: the small info address is asked first, and the video starts as soon as it is known to exist.
+     It is muted (the only way phones let a page play by itself), inline (never opens a player), and any pause is undone at once. If it cannot start
+     within 2.6 seconds, or errors, it is dropped and the usual loading screen carries on. window._ldVid tells the app when it may take the screen
+     down: not before the video has finished (at most 8 seconds). */
+  (function(){
+    var ls = document.getElementById('loadingScreen'), v = document.getElementById('ldVideo');
+    var st = window._ldVid = { state: 'none', endsAt: 0 };
+    if (!ls || !v) return;
+    var VK = 'personalcare_loader_vid', BASE = '/k7x2/public/loader-video', ver = '';
+    try { ver = localStorage.getItem(VK) || ''; } catch (e) {}
+    function fail(){
+      if (st.state === 'failed' || st.state === 'ended') return;
+      st.state = 'failed'; ls.classList.remove('has-video', 'vid-done');
+      try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
+    }
+    v.muted = true; v.defaultMuted = true; v.loop = false;
+    v.addEventListener('playing', function(){
+      if (st.state === 'failed' || st.state === 'ended') return;
+      st.state = 'playing'; ls.classList.add('has-video');
+      var left = isFinite(v.duration) ? Math.max(0, v.duration - v.currentTime) : 3;
+      st.endsAt = Date.now() + Math.min(8, left) * 1000 + 150;
+    });
+    v.addEventListener('ended', function(){ st.state = 'ended'; st.endsAt = 0; ls.classList.add('vid-done'); });
+    v.addEventListener('error', fail);
+    v.addEventListener('pause', function(){ if (st.state === 'playing' && !v.ended) { try { var p = v.play(); if (p && p.catch) p.catch(function(){}); } catch (e) {} } });
+    v.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden && st.state === 'playing' && !v.ended) { try { var p = v.play(); if (p && p.catch) p.catch(function(){}); } catch (e) {} } });
+    function start(version){
+      st.state = 'pending'; ver = version || '';
+      if (ver) ls.classList.add('has-video');   /* a video is known to exist: the picture area is ready (black) before its first frame */
+      v.src = BASE + (ver ? '?v=' + encodeURIComponent(ver) : '');
+      try { var p = v.play(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
+      setTimeout(function(){ if (st.state === 'pending') fail(); }, 2600);
+    }
+    if (ver) { start(ver); }
+    if (window.fetch) {
+      fetch('/k7x2/public/loader-video-info', { cache: 'no-cache' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+        if (!d || d.status !== 'success') return;
+        if (!d.enabled) { try { localStorage.removeItem(VK); } catch (e) {} return; }
+        if (d.version && d.version !== ver) {
+          try { localStorage.setItem(VK, d.version); } catch (e) {}
+          if (st.state === 'none') start(d.version);                                   /* first launch with a video: start it now */
+          else try { fetch(BASE + '?v=' + encodeURIComponent(d.version), { cache: 'force-cache' }).catch(function(){}); } catch (e) {}   /* a newer one: kept ready for the next launch */
+        }
+      }).catch(function(){});
+    }
   })();
   try {
     var ls = document.getElementById('loadingScreen'), bg = document.getElementById('ldBg'), KEY = 'personalcare_loader_img', FX = 'personalcare_loader_fx';

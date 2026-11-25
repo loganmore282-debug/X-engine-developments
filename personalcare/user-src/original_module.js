@@ -1904,13 +1904,22 @@ function hideLoadingScreen(){
     if (_ldOutTimer) clearTimeout(_ldOutTimer);
     _ldOutTimer = setTimeout(() => { _ldOutTimer = null; ls.style.display = 'none'; ls.classList.remove('ld-out'); }, 300);
   };
-  if (!wait) { done(); return; }
-  _ldTimer = setTimeout(() => { _ldTimer = null; done(); }, wait);
+  // The start-up video (if there is one) is let finish first: wait while it is still starting (at most 2.6 s) or still playing (at most 8 s).
+  const gate = () => {
+    _ldTimer = null;
+    const vs = window._ldVid, left = !vs ? 0 : vs.state === 'pending' ? 250 : vs.state === 'playing' ? Math.max(0, (vs.endsAt || 0) - Date.now()) : 0;
+    if (left > 0) { _ldTimer = setTimeout(gate, Math.min(left, 250)); return; }
+    done();
+  };
+  if (!wait) { gate(); return; }
+  _ldTimer = setTimeout(gate, wait);
 }
 function showLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
   if (_ldOutTimer) { clearTimeout(_ldOutTimer); _ldOutTimer = null; }
   $('loadingScreen').classList.remove('ld-out');
+  // The start-up video plays only once, at launch: a loading screen shown again later is the ordinary one.
+  $('loadingScreen').classList.remove('has-video', 'vid-done');
   $('loadingScreen').style.display = 'flex';
 }
 // A page's blocks (cards, tabs, lists, rows) fade in and rise about 22 px one after another, the way the owner's recording shows.

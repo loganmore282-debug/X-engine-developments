@@ -2858,8 +2858,8 @@ function applyAdminBrandName(name){
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
 async function renderBanners(){
-  const [r, br, cir, bar, annr] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/personalcare-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
+  const [r, br, cir, bar, annr, lvr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/personalcare-images'), api('/admin/brand-assets'), api('/admin/announcement-image'), api('/admin/loader-video')
   ]);
   if (staleTab('banners')) return;
   const s = r.settings||{};
@@ -2870,6 +2870,7 @@ async function renderBanners(){
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
   const loaderBgImage = cir.loaderbg||'';
+  const lv = (lvr && lvr.status==='success' && lvr.enabled) ? lvr : null;
   const linkPreviewImage = cir.linkpreview||'';
   const avatarImage = cir.avatar||'', recThumbImage = cir.recthumb||'';
   const teamHeroImage = cir.teamhero||'', shareHeroImage = cir.sharehero||'', myHeroImage = cir.myhero||'', rulesHeroImage = cir.ruleshero||'';
@@ -2944,6 +2945,22 @@ async function renderBanners(){
         ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Start-up video</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">A short video that fills the whole screen when the app opens. It starts by itself, has no sound and cannot be paused or touched; the app opens when it ends. About 3 seconds is best (never more than ${15}), MP4 (H.264) or WebM, under 10 MB, ideally in the shape of a phone screen (portrait, 9:16). If a phone cannot play it, the usual loading screen shows instead.</p>
+      ${lv?`<div class="banner-row" style="align-items:flex-start">
+        <video id="lvPreview" src="${esc(SERVER)}/public/loader-video?v=${esc(lv.version)}" muted playsinline controls preload="metadata" style="width:120px;max-height:210px;border-radius:10px;background:#000;object-fit:cover"></video>
+        <div style="flex:1;min-width:0;font-size:12px;line-height:18px">
+          <b>Custom video is live</b><br>
+          ${esc(lv.type.replace('video/','').toUpperCase())} &middot; ${(lv.size/1048576).toFixed(2)} MB${lv.seconds?` &middot; ${lv.seconds} s`:''}
+          ${lv.fastStart?'':'<br><span style="color:#b45309">This MP4 has its index at the end, so it starts only after it has fully arrived. Export it again with &ldquo;Fast start / Web optimised&rdquo; so it shows at once.</span>'}
+        </div>
+        <button class="btn danger sm" id="lvClear">Remove</button>
+      </div>`:'<div class="muted" style="font-size:12px;margin:2px 0 6px">Not set &mdash; the usual loading screen shows.</div>'}
+      <label class="btn block file-btn" style="margin-top:10px">${lv?'Replace video':'Upload video'}<input type="file" id="lvFile" accept="video/mp4,video/webm" hidden></label>
+      <div class="muted" style="font-size:11.5px;margin-top:6px">A new video shows to members the next time they open the app.</div>
     </div>
 
     <h2 class="sec">Link preview (Telegram)</h2>
@@ -3173,6 +3190,33 @@ function wireBannerHandlers(){
   wirePersonalCareImageSlot('ruleshero', 'rulesHeroFile', 'rulesHeroClear', 'Rules picture saved', 'Rules picture removed');
   wirePersonalCareImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen picture saved', 'Loading screen picture removed');
   wirePersonalCareImageSlot('linkpreview', 'linkPreviewFile', 'linkPreviewClear', 'Link preview picture saved', 'Link preview picture removed');
+  const lvFile = $('lvFile');
+  if (lvFile) lvFile.addEventListener('change', async e=>{
+    const f = e.target.files[0]; e.target.value = ''; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        if (f.size > 10*1024*1024) throw new Error('The video is '+(f.size/1048576).toFixed(1)+' MB. Keep it under 10 MB.');
+        // Play it here first: this browser must be able to read it, and the length is checked before anything is sent.
+        const url = URL.createObjectURL(f), probe = document.createElement('video'); probe.muted = true; probe.preload = 'metadata'; probe.src = url;
+        try {
+          await new Promise((ok, no)=>{ probe.onloadedmetadata = ok; probe.onerror = ()=>no(new Error('This browser cannot play that file. Use an MP4 (H.264) or a WebM video.')); setTimeout(()=>no(new Error('Could not read the video.')), 10000); });
+          if (probe.duration > 15) throw new Error('The video is '+Math.round(probe.duration)+' seconds. Keep it under 15 seconds (3 to 5 is best).');
+        } finally { URL.revokeObjectURL(url); }
+        toast('Uploading the video…','ok');
+        const r = await fetch(SERVER+'/admin/loader-video/set', { method:'POST', headers:{ 'Content-Type': f.type || 'video/mp4', ...(SESSION_TOKEN?{ Authorization:'Bearer '+SESSION_TOKEN }:{}) }, body: f, signal: AbortSignal.timeout(120000) });
+        let d; try { d = await r.json(); } catch(_) { d = { status:'error', message: r.status===413 ? 'The video is too big for the server.' : 'Could not upload the video.' }; }
+        toast(d.status==='success'?'Start-up video saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderBanners();
+      } catch(err){ toast(err.name==='TimeoutError' ? 'The upload took too long. Try a smaller video.' : (err.message||'Could not upload the video'), 'err'); }
+    })());
+  });
+  const lvClear = $('lvClear');
+  if (lvClear) lvClear.addEventListener('click', async()=>{
+    if (!confirm('Remove the start-up video? The usual loading screen shows again.')) return;
+    const d = await api('/admin/loader-video/clear', {});
+    toast(d.status==='success'?'Start-up video removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if (d.status==='success') renderBanners();
+  });
   const saveLinkPreview = $('saveLinkPreview');
   if (saveLinkPreview) saveLinkPreview.addEventListener('click', async()=>{
     const d = await api('/admin/settings/update', { settings: { linkPreviewTitle: $('lpTitle').value, linkPreviewText: $('lpText').value } });

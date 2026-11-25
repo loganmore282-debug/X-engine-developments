@@ -3724,6 +3724,102 @@ app.get('/public/loader-image', async (req, res) => {
     res.send(buf);
   } catch (e) { res.status(500).end(); }
 });
+// ── START-UP LOADER VIDEO (owner: "on the start app loader page I can put a video background ... upload it from the admin panel, it is just 3 seconds") ──
+// One short MP4 / WebM, kept in the database next to the other pictures (so it is in the nightly backups), held in memory and served as a real
+// video with Range support (browsers and iPhones need it to start playing). The address with ?v=<version> is cached for a year by the phone, so from the
+// second launch on the video comes from the phone's own cache in the first moments; the plain address always checks. A re-upload makes a new version.
+const LOADER_VIDEO_MAX = 10 * 1024 * 1024, LOADER_VIDEO_MAX_SECONDS = 15;
+let _loaderVideoCache = null;   // { ver, type, size, fastStart, seconds, buf, etag } or { none: true }
+async function getLoaderVideo() {
+  if (_loaderVideoCache) return _loaderVideoCache.none ? null : _loaderVideoCache;
+  const d = await db.collection('banners').doc('personalcare-loadervideo').get();
+  const x = d.exists ? d.data() : null;
+  if (!x || !x.data) { _loaderVideoCache = { none: true }; return null; }
+  const buf = Buffer.from(String(x.data), 'base64');
+  _loaderVideoCache = { ver: String(x.ver), type: String(x.type || 'video/mp4'), size: buf.length, fastStart: x.fastStart !== false, seconds: Number(x.seconds) || 0, buf, etag: '"lv-' + String(x.ver) + '"' };
+  return _loaderVideoCache;
+}
+// What the bytes really are: an MP4 (an 'ftyp' box) or a WebM (the EBML mark). For an MP4 also: whether its index (moov) comes before the picture data
+// (mdat), which is what lets it start playing before it has fully arrived, and its length in seconds (from the 'mvhd' box).
+function sniffLoaderVideo(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 32) return null;
+  if (buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3) return { type: 'video/webm', fastStart: true, seconds: 0 };
+  if (buf.toString('latin1', 4, 8) !== 'ftyp') return null;
+  let pos = 0, moov = -1, mdat = -1;
+  for (let guard = 0; guard < 64 && pos + 8 <= buf.length; guard++) {
+    let size = buf.readUInt32BE(pos); const kind = buf.toString('latin1', pos + 4, pos + 8);
+    if (size === 1 && pos + 16 <= buf.length) size = Number(buf.readBigUInt64BE(pos + 8)); else if (size === 0) size = buf.length - pos;
+    if (kind === 'moov' && moov < 0) moov = pos;
+    if (kind === 'mdat' && mdat < 0) mdat = pos;
+    if (!(size >= 8)) break;
+    pos += size;
+  }
+  let seconds = 0;
+  const mv = buf.indexOf('mvhd');
+  if (mv > 0 && mv + 32 < buf.length) {
+    const ver = buf[mv + 4];
+    const scale = ver === 1 ? buf.readUInt32BE(mv + 4 + 1 + 3 + 8 + 8) : buf.readUInt32BE(mv + 4 + 1 + 3 + 4 + 4);
+    const dur = ver === 1 ? Number(buf.readBigUInt64BE(mv + 4 + 1 + 3 + 8 + 8 + 4)) : buf.readUInt32BE(mv + 4 + 1 + 3 + 4 + 4 + 4);
+    if (scale > 0 && Number.isFinite(dur)) seconds = Math.round(dur / scale * 10) / 10;
+  }
+  return { type: 'video/mp4', fastStart: moov >= 0 && (mdat < 0 || moov < mdat), seconds };
+}
+const loaderVideoMeta = v => ({ enabled: !!v, version: v ? v.ver : '', type: v ? v.type : '', size: v ? v.size : 0, fastStart: v ? v.fastStart : true, seconds: v ? v.seconds : 0 });
+app.get('/public/loader-video-info', async (req, res) => {
+  try { res.set('Cache-Control', 'no-cache'); res.json(Object.assign({ status: 'success' }, loaderVideoMeta(await getLoaderVideo()))); }
+  catch (e) { res.status(500).json({ status: 'error' }); }
+});
+app.get('/public/loader-video', async (req, res) => {
+  try {
+    const v = await getLoaderVideo();
+    if (!v) return res.status(404).end();
+    const versioned = String(req.query.v || '') === v.ver;
+    res.set({ 'Content-Type': v.type, 'Accept-Ranges': 'bytes', ETag: v.etag, 'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Cache-Control': versioned ? 'public, max-age=31536000, immutable' : 'no-cache' });
+    if (req.headers['if-none-match'] === v.etag) return res.status(304).end();
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+    if (range && (range[1] !== '' || range[2] !== '')) {
+      let start = range[1] === '' ? Math.max(0, v.size - Number(range[2])) : Number(range[1]);
+      let end = range[1] === '' || range[2] === '' ? v.size - 1 : Math.min(Number(range[2]), v.size - 1);
+      if (!(start <= end) || start >= v.size) { res.set('Content-Range', 'bytes */' + v.size); return res.status(416).end(); }
+      res.status(206).set({ 'Content-Range': 'bytes ' + start + '-' + end + '/' + v.size, 'Content-Length': String(end - start + 1) });
+      return res.end(v.buf.subarray(start, end + 1));
+    }
+    res.set('Content-Length', String(v.size));
+    res.end(v.buf);
+  } catch (e) { res.status(500).end(); }
+});
+app.get('/admin/loader-video', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json(Object.assign({ status: 'success' }, loaderVideoMeta(await getLoaderVideo()))); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not read the loading video' }); }
+});
+// The upload is the raw file (Content-Type video/mp4 or video/webm), not base64 in JSON: no 33 percent growth, and the 64 kb JSON parser never sees it.
+app.post('/admin/loader-video/set', express.raw({ type: () => true, limit: '11mb' }), async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || buf.length < 2000) return res.status(400).json({ status: 'error', message: 'Choose a video file.' });
+  if (buf.length > LOADER_VIDEO_MAX) return res.status(400).json({ status: 'error', message: 'The video is too big. Keep it under 10 MB (a 3 second video is usually 1 to 3 MB).' });
+  const info = sniffLoaderVideo(buf);
+  if (!info) return res.status(400).json({ status: 'error', message: 'That is not an MP4 or WebM video.' });
+  if (info.seconds > LOADER_VIDEO_MAX_SECONDS) return res.status(400).json({ status: 'error', message: 'The video is ' + Math.round(info.seconds) + ' seconds. Keep it under ' + LOADER_VIDEO_MAX_SECONDS + ' seconds (3 to 5 is best).' });
+  try {
+    const ver = String(Date.now());
+    await db.collection('banners').doc('personalcare-loadervideo').set({ data: buf.toString('base64'), type: info.type, ver, fastStart: info.fastStart, seconds: info.seconds, size: buf.length });
+    _loaderVideoCache = null;
+    logAdminAction(req, 'loader_video_set', { size: buf.length, type: info.type, seconds: info.seconds });
+    res.json(Object.assign({ status: 'success' }, loaderVideoMeta(await getLoaderVideo())));
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this video' }); }
+});
+app.post('/admin/loader-video/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('banners').doc('personalcare-loadervideo').set({ data: null });
+    _loaderVideoCache = null;
+    logAdminAction(req, 'loader_video_cleared', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove this video' }); }
+});
 // The path nginx puts in front of this server's routes (API in deploy/make-nginx.js and PERSONALCARE_AUTH_API in the app): a crawler needs the picture's full address.
 const PUBLIC_API_PREFIX = 'k7x2';
 // ── LINK PREVIEW (Telegram only) ──
