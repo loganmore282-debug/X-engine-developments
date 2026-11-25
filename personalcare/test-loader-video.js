@@ -67,7 +67,10 @@ const call = async (key, req) => { const r = res(); await routes[key](Object.ass
   // ── the loading screen ──
   ok(/<video id="ldVideo" class="ld-vid" muted playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback"/.test(idx) && !/id="ldVideo"[^>]*\bcontrols\b(?!list)/.test(idx), 'the video is muted, inline, preloaded, with no controls');
   ok(/#loadingScreen \.ld-vid\{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover[^}]*pointer-events:none/.test(idx), 'it fills the whole screen (cover) and cannot be touched');
-  ok(/#loadingScreen\.has-video \.ld-bg,#loadingScreen\.has-video \.ld-bar[^{]*\{display:none !important;\}/.test(idx), 'while it plays the other loader parts are hidden');
+  ok(/#loadingScreen \.ld-bg,#loadingScreen \.ld-ring,#loadingScreen \.ld-bar,#loadingScreen \.ld-pct\{z-index:2;\}/.test(idx) && /#loadingScreen \.ld-vid\{[^}]*z-index:0/.test(idx) && !/has-video \.ld-(bg|bar|pct|ring)[^{]*\{[^}]*display:none/.test(idx), 'the video is only the BACKGROUND: the round picture, ring, bar and percent stay on top of it');
+  ok(/#loadingScreen\.vid-on \.ld-bar\{background:rgba\(255,255,255,\.72\)/.test(idx) && /#loadingScreen\.vid-on \.ld-pct\{color:#fff/.test(idx), 'and the bar and the percent stay readable over the picture');
+  ok(/fill\.animate\(frames, \{ duration: DUR, easing: 'linear', fill: 'forwards' \}\)/.test(idx) && /translateX\(' \+ \(curve\(DUR \/ 1000 \* i \/ N\) - 100\) \+ '%\)'/.test(idx) && /will-change:transform/.test(idx), 'the progress bar slides with a compositor animation (smooth even while the app is opening)');
+  ok(/window\._ckLoaderDone = function\(\)\{[^]*?translateX\(0%\)/.test(idx), 'and runs on to 100 percent when the screen is taken down');
   ok(/v\.addEventListener\('pause'[^\n]*v\.play\(\)/.test(idx) && /visibilitychange/.test(idx.slice(idx.indexOf('THE START-UP VIDEO'))), 'a pause (or coming back to the app) makes it play again at once');
   ok(/setTimeout\(function\(\)\{ if \(st\.state === 'pending'\) fail\(\); \}, 2600\)/.test(idx) && /v\.addEventListener\('error', fail\)/.test(idx), 'a video that cannot start in 2.6 s, or errors, is dropped and the usual loader carries on');
   ok(/personalcare_loader_vid/.test(idx) && /if \(ver\) \{ start\(ver\); \}/.test(idx) && /BASE \+ \(ver \? '\?v=' \+ encodeURIComponent\(ver\) : ''\)/.test(idx), 'a remembered version starts the video in the first moments, from the phone\'s own cache');
@@ -94,7 +97,7 @@ const call = async (key, req) => { const r = res(); await routes[key](Object.ass
     g = show(undefined, false); ok(!g.cls.has('has-video'), 'no video: nothing kept');
     g = show({ state: 'ended' }, true); ok(!g.cls.has('has-video') && !g.cls.has('vid-on') && !g.cls.has('vid-done'), 'a loading screen shown after the launch one has gone is the ordinary one'); }
   ok(/window\._ldEverHidden = true;/.test(mod), 'the launch screen being taken down is remembered');
-  ok(/#loadingScreen \.ld-vid\{[^}]*visibility:hidden;opacity:0;transition:opacity \.45s ease/.test(idx) && /#loadingScreen\.vid-on \.ld-vid\{visibility:visible;opacity:1;\}/.test(idx) && /ls\.classList\.add\('vid-on'\)/.test(idx), 'the video fades in (no sudden pop)');
+  ok(/#loadingScreen \.ld-vid\{[^}]*visibility:hidden;opacity:0;transition:opacity \.45s ease/.test(idx) && /#loadingScreen\.vid-on \.ld-vid\{visibility:visible;opacity:1;\}/.test(idx) && /ls\.classList\.add\('vid-on', 'has-video'\)/.test(idx), 'the video fades in (no sudden pop)');
   // the admin panel
   ok(/Start-up video/.test(adm) && /id="lvFile" accept="video\/mp4,video\/webm"/.test(adm) && /id="lvClear"/.test(adm) && /\/admin\/loader-video\/set/.test(adm) && /\/admin\/loader-video\/clear/.test(adm), 'Admin > Banners has the Start-up video card (upload, replace, remove)');
   ok(/probe\.duration > 15/.test(adm) && /10\*1024\*1024/.test(adm) && /body: f,/.test(adm), 'the panel checks size and length and plays the file before sending it raw');

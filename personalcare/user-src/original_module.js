@@ -1905,7 +1905,7 @@ function hideLoadingScreen(){
     if (_ldOutTimer) clearTimeout(_ldOutTimer);
     _ldOutTimer = setTimeout(() => { _ldOutTimer = null; ls.style.display = 'none'; ls.classList.remove('ld-out'); }, 300);
   };
-  // The start-up video (if there is one) is let finish first: wait while it is still starting (at most 2.6 s) or still playing (at most 8 s).
+  // The start-up video (the loading screen's background, if there is one) is let finish first: wait while it is still starting (at most 2.6 s) or still playing (at most 8 s).
   const gate = () => {
     _ldTimer = null;
     const vs = window._ldVid, left = !vs ? 0 : vs.state === 'pending' ? 250 : vs.state === 'playing' ? Math.max(0, (vs.endsAt || 0) - Date.now()) : 0;

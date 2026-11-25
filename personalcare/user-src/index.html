@@ -349,13 +349,14 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#00329d 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
-/* ── START-UP VIDEO (Admin > Banners > Start-up video): fills the whole screen, plays by itself, cannot be touched or paused. Shown only while it is playing; if it cannot play, the usual loader stays. ── */
-#loadingScreen .ld-vid{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;visibility:hidden;opacity:0;transition:opacity .45s ease;background:#000;pointer-events:none;z-index:1;-webkit-user-select:none;user-select:none;}
+/* ── START-UP VIDEO (Admin > Banners > Start-up video): the BACKGROUND of the loading screen. It fills the whole screen, plays by itself, cannot be touched or paused, and fades in; the round picture, its ring, the progress bar and the percent stay on top of it exactly as they are. ── */
+#loadingScreen .ld-vid{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block;visibility:hidden;opacity:0;transition:opacity .45s ease;background:#000;pointer-events:none;z-index:0;transform:translateZ(0);-webkit-user-select:none;user-select:none;}
 #loadingScreen.vid-on .ld-vid{visibility:visible;opacity:1;}
-#loadingScreen.has-video{background:#000 !important;}
-#loadingScreen.has-video .ld-bg,#loadingScreen.has-video .ld-bar,#loadingScreen.has-video .ld-pct,#loadingScreen.has-video .ld-txt,#loadingScreen.has-video .ld-spin,#loadingScreen.has-video .ld-ring{display:none !important;}
-/* when the video has ended and the app is still opening, a small ring at the bottom shows it is still working */
-#loadingScreen.has-video.vid-done .ld-ring{display:block !important;position:absolute;top:auto !important;bottom:calc(9% + env(safe-area-inset-bottom,0px));left:50%;width:38px !important;height:38px !important;margin-left:-19px !important;border-width:3px;border-color:rgba(255,255,255,.25) !important;border-top-color:#fff !important;z-index:3;}
+#loadingScreen .ld-bg,#loadingScreen .ld-ring,#loadingScreen .ld-bar,#loadingScreen .ld-pct{z-index:2;}
+/* on top of a moving picture the bar and the percent need a little help to stay readable */
+#loadingScreen.vid-on .ld-bar{background:rgba(255,255,255,.72) !important;box-shadow:0 1px 6px rgba(0,0,0,.25);}
+#loadingScreen.vid-on .ld-pct{color:#fff !important;text-shadow:0 1px 5px rgba(0,0,0,.7);}
+#loadingScreen.vid-on .ld-ring{box-shadow:0 0 0 2px rgba(255,255,255,.45),0 0 14px rgba(255,255,255,.4);}
 /* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
 #loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
 #loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
@@ -1769,7 +1770,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   background:radial-gradient(circle at 50% 40%,#00329d 0%,#00329d 70%) center/cover no-repeat;opacity:1;filter:none;transform:none;box-shadow:0 0 0 2px #fff,0 4px 14px rgba(0,50,157,.25);overflow:hidden;}
 #loadingScreen .ld-bg{top:24%;left:50%;}
 #loadingScreen .ld-bar{position:absolute;top:41.2%;left:50%;width:203px;height:10px;margin-left:-101px;border-radius:5px;background:#e0e0e0;overflow:hidden;}
-#loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:5px;background:#00329d;transition:width .2s linear;}
+#loadingScreen .ld-bar i{display:block;height:100%;width:0;border-radius:5px;background:#00329d;transition:width .2s linear;will-change:transform;}
 #loadingScreen .ld-pct{position:absolute;top:calc(41.2% + 19px);left:0;right:0;text-align:center;font:400 12px/1 'Roboto',system-ui,sans-serif;color:#777;}
 /* ── Login and Create Account ── */
 .va-screen{background:var(--ck-auth);}
@@ -2100,7 +2101,7 @@ body{background-attachment:fixed;}
 .ck-mem-time{margin-top:0;}
 /* ── Round ring on the loader picture, round picture on Login and Create Account ── */
 @keyframes ckLdSpin{to{transform:rotate(360deg);}}
-#loadingScreen .ld-ring{position:absolute;top:calc(24% - 5px);left:50%;width:96px;height:96px;margin-left:-48px;box-sizing:border-box;border-radius:50%;border:3px solid transparent;border-top-color:#00329d;border-left-color:#00329d;animation:ckLdSpin 1.1s linear infinite;}
+#loadingScreen .ld-ring{will-change:transform;position:absolute;top:calc(24% - 5px);left:50%;width:96px;height:96px;margin-left:-48px;box-sizing:border-box;border-radius:50%;border:3px solid transparent;border-top-color:#00329d;border-left-color:#00329d;animation:ckLdSpin 1.1s linear infinite;}
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-ring{animation:none;}}
 .ck-authlogo{position:absolute;left:50%;top:164px;z-index:2;width:76px;height:76px;margin-left:-38px;border-radius:50%;background:url('/k7x2/public/loader-image') center/cover no-repeat,radial-gradient(circle at 50% 40%,#00329d 0%,#00329d 70%);pointer-events:none;}
 #authScreen .va-eye{color:#9aa4b0;}
@@ -2546,20 +2547,35 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
    first launch ever has no copy yet, so it shows the gradient with the Loading... word until the picture arrives. */
 (function(){
   window._personalcareLoaderStart = Date.now();
-  /* The bar and its percent: eases toward 96 while the app opens, and jumps to 100 the moment the screen is taken down. */
+  /* The bar and its percent: eases toward 96 while the app opens, and jumps to 100 the moment the screen is taken down.
+     The bar is a full-width fill that SLIDES in from the left with a Web Animation (it runs on the browser's compositor, so it stays smooth while
+     the 250 KB of app code is being unpacked and the video is decoding); the percent text follows the same curve. Browsers without it keep the old width steps. */
   (function(){
-    var fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), t0 = Date.now(), cur = 0;
-    function set(n){ n = Math.max(cur, Math.min(100, Math.round(n))); cur = n; if (fill) fill.style.width = n + '%'; if (pct) pct.textContent = n + '%'; }
-    window._ckLoaderDone = function(){ set(100); };
+    var fill = document.getElementById('ldFill'), pct = document.getElementById('ldPct'), t0 = Date.now(), cur = 0, slide = null;
+    var DUR = 9000, curve = function(sec){ return 96 * (1 - Math.exp(-sec / 1.6)); };
+    function text(n){ n = Math.max(cur, Math.min(100, Math.round(n))); cur = n; if (pct) pct.textContent = n + '%'; return n; }
+    try {
+      if (fill && fill.animate) {
+        var frames = [], N = 18;
+        for (var i = 0; i <= N; i++) frames.push({ transform: 'translateX(' + (curve(DUR / 1000 * i / N) - 100) + '%)' });
+        fill.style.width = '100%'; fill.style.transform = 'translateX(-98%)'; fill.style.transition = 'none';
+        slide = fill.animate(frames, { duration: DUR, easing: 'linear', fill: 'forwards' });
+      }
+    } catch (e) { slide = null; }
+    function set(n){ var v = text(n); if (!slide && fill) fill.style.width = v + '%'; }
+    window._ckLoaderDone = function(){
+      if (cur >= 100) return; text(100);
+      if (slide && fill) { try { var from = getComputedStyle(fill).transform; fill.animate([{ transform: from }, { transform: 'translateX(0%)' }], { duration: 220, easing: 'ease-out', fill: 'forwards' }); } catch (e) { fill.style.transform = 'translateX(0%)'; } }
+      else if (fill) fill.style.width = '100%';
+    };
     var iv = setInterval(function(){
       var ls = document.getElementById('loadingScreen');
       if (!ls || ls.style.display === 'none' || cur >= 100) { clearInterval(iv); return; }
-      var e = (Date.now() - t0) / 1000;
-      set(96 * (1 - Math.exp(-e / 1.6)));
+      set(curve((Date.now() - t0) / 1000));
     }, 120);
     set(2);
   })();
-  /* THE START-UP VIDEO. Remembered per device (a version number), so every launch after the first starts the video from the phone's own cache in
+  /* THE START-UP VIDEO (the loading screen's BACKGROUND). Remembered per device (a version number), so every launch after the first starts the video from the phone's own cache in
      the first moments. No remembered version: the small info address is asked first, and the video starts as soon as it is known to exist.
      It is muted (the only way phones let a page play by itself), inline (never opens a player), and any pause is undone at once. If it cannot start
      within 2.6 seconds, or errors, it is dropped and the usual loading screen carries on. window._ldVid tells the app when it may take the screen
@@ -2579,10 +2595,8 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
     v.addEventListener('playing', function(){
       if (st.state === 'failed' || st.state === 'ended') return;
       st.state = 'playing';
-      /* the picture fades in over whatever is showing; once it covers it, the loader's own parts are taken away (no sudden swap) */
-      ls.classList.add('vid-on');
-      if (ls.classList.contains('has-video')) { /* a remembered video: the black base was there from the first frame */ }
-      else setTimeout(function(){ if (st.state === 'playing' || st.state === 'ended') ls.classList.add('has-video'); }, 480);
+      /* the picture fades in BEHIND the round picture, the ring, the bar and the percent, which stay exactly as they are */
+      ls.classList.add('vid-on', 'has-video');
       var left = isFinite(v.duration) ? Math.max(0, v.duration - v.currentTime) : 3;
       st.endsAt = Date.now() + Math.min(8, left) * 1000 + 150;
     });
@@ -2593,7 +2607,6 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
     document.addEventListener('visibilitychange', function(){ if (!document.hidden && st.state === 'playing' && !v.ended) { try { var p = v.play(); if (p && p.catch) p.catch(function(){}); } catch (e) {} } });
     function start(version){
       st.state = 'pending'; ver = version || '';
-      if (ver) ls.classList.add('has-video');   /* a video is known to exist: the picture area is ready (black) before its first frame */
       v.src = BASE + (ver ? '?v=' + encodeURIComponent(ver) : '');
       try { var p = v.play(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
       setTimeout(function(){ if (st.state === 'pending') fail(); }, 2600);
