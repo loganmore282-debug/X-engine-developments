@@ -56,7 +56,10 @@ async function main(){
   ok(sent[0][1].amount===30000&&sent[0][1].phone==='+256772123456'&&sent[0][1].network==='MTN Mobile Money'&&!('orderNo' in sent[0][1]),'with the amount, the full number and the provider');
   const scr=d.getElementById('payScreen');
   ok(scr.classList.contains('show')&&w.eval('_pg.view')==='initiated'&&w.eval('_pg.depositId')==='dep1','the polling screen is up');
-  ok(/Payment Initiated/.test(d.getElementById('pgBody').textContent)&&/Awaiting mobile money approval/.test(d.getElementById('pgBody').textContent)&&/detected automatically/.test(d.getElementById('pgBody').textContent),'it says the prompt is on the phone and the payment is detected automatically');
+  const body=()=>d.getElementById('pgBody').textContent;
+  ok(/Approve on your phone/.test(body())&&/\+256 772 123 456/.test(body())&&/UGX 30,?000/.test(body())&&/MTN Mobile Money/.test(body())&&/REF-1/.test(body())&&/detected automatically/.test(body()),'it shows the amount, the number, the provider and the reference, and says the payment is detected automatically');
+  ok(d.querySelectorAll('#pgBody .pp-steps li').length===3&&d.querySelector('#pgBody .pp-ld')&&!d.querySelector('#pgBody .pg-sp'),'three steps and the ripple loader');
+  ok(d.querySelector('#payScreen .pp-hd .pp-x')&&/closePaymentPage\(\)/.test(d.querySelector('#payScreen .pp-x').getAttribute('onclick')),'an X at the top right closes the screen');
   ok(!d.getElementById('sheetBg').classList.contains('show'),'the Deposit page is closed behind it');
   // closing the Deposit page takes its history step away; that step must NOT close the polling screen that has just opened (it did: the prompt
   // was sent and the member saw nothing)
@@ -67,14 +70,15 @@ async function main(){
   // the answer: failed -> the failed screen with Try again; matched -> success and home
   w.depositStatusHold=async()=>({status:'success',state:'failed',message:'Declined by the provider.'});
   const tok=w.eval('_pg.token');await w.eval('pgApply')({status:'success',state:'failed',message:'Declined by the provider.'},tok);
-  ok(/Payment failed/.test(d.getElementById('pgBody').textContent)&&/Try again/.test(d.getElementById('pgBody').textContent),'a failed payment shows the failed screen with Try again');
+  ok(/Payment failed/.test(body())&&/Try again/.test(body()),'a failed payment shows the failed screen with Try again');
   w.eval('closePaymentPage()');ok(!scr.classList.contains('show'),'Back / close leaves the polling screen');
   // success path
   sent.length=0;w.eval('openDepositFormSheet()');d.getElementById('depAmount').value='30000';d.getElementById('depPhone').value='0772123456';w.syncDepositNet();
   await w.submitDeposit();ok(scr.classList.contains('show'),'a second deposit opens the polling screen again');
   let accountReads=0;w.api=async(path)=>{if(path==='/account'){accountReads++;return {status:'success',account:{walletBalance:35000}};}return {status:'success',transactions:[]};};
   const tok2=w.eval('_pg.token');const done=await w.eval('pgApply')({status:'success',state:'matched'},tok2);
-  ok(done===true&&w.eval('_pg.view')==='done','a matched payment ends the polling with success');
+  ok(done===true&&w.eval('_pg.view')==='done'&&/Deposit received/.test(body()),'a matched payment ends the polling and shows Deposit received');
+  ok(/pgHome\(\)/.test(d.querySelector('#payScreen .pp-btn').getAttribute('onclick')),'the Back to Home button calls pgHome');
   w.pgHome();await new Promise(r=>setTimeout(r,60));
   ok(!scr.classList.contains('show')&&accountReads>=1&&w.eval('STATE.account.walletBalance')===35000,'Back to Home closes it and reads the new balance');
   // the old order page is gone from the code

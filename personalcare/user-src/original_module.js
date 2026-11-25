@@ -5741,13 +5741,13 @@ window.submitDeposit = async function(){
   const hadStep = !!(history.state && history.state.sheet);
   closeSheet({ fromAction: true });
   if (hadStep) _dlgIgnore();
-  openDepositPolling(r.depositId, r.reference || '');
+  openDepositPolling(r.depositId, r.reference || '', { amount, phone, network });
 };
 // ── THE POLLING SCREEN ──
 // After Pay on the Deposit page the mobile money prompt is on the member's phone and this screen waits for the provider's answer (a real status
 // read every 1.5 s, then every 4 s). On success the "Success" tick shows and the app goes back to Home by itself. There is no separate payment
 // page any more: the phone number and provider are typed on the Deposit page itself.
-var _pg = { view: '', depositId: '', reference: '', token: 0 };
+var _pg = { view: '', depositId: '', reference: '', amount: 0, phone: '', network: '', token: 0 };
 // Chrome offers "Use saved password?" on any phone-looking box when the page also holds a password box (the sign-in and change-password boxes sit
 // in the same document). While the payment page is open those password boxes are switched off, so there is nothing to pair the phone box with.
 function pgLockPasswordBoxes(on){
@@ -5761,47 +5761,52 @@ function pgOpen(){ const el = $('payScreen'); return !!(el && el.classList.conta
 function pgBrand(){ return esc(brandName()) + ' Pay'; }
 function pgTitle(){ return brandName() + ' Pay'; }
 function pgMoney(n){ return esc(cur()) + ' ' + numGroup(Number(n) || 0, false); }
-function pgCenterHtml(icon, title, text, extra){
-  return `<div class="pg-center">${icon}<h2>${esc(title)}</h2><p class="pg-msg">${esc(text)}</p>${extra || ''}</div>`;
-}
-var PG_CHECK = '<span class="pg-ico"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#1ed67a" stroke-width="3.4"/><path d="M17.5 24.5l4.8 4.8 8.7-9.8" fill="none" stroke="#1ed67a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-var PG_CROSS = '<span class="pg-ico pg-bad"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="none" stroke="#ff5d73" stroke-width="3.4"/><path d="M18.5 18.5l11 11M29.5 18.5l-11 11" fill="none" stroke="#ff5d73" stroke-width="3.4" stroke-linecap="round"/></svg></span>';
-// The clock is alive: the minute hand goes round every 4 seconds and the hour hand every 48 (SVG's own animation, so it moves the same on every phone and
-// needs no script). Used for the countdown corner and for "Awaiting mobile money approval".
-var PG_CLOCK = '<svg class="pg-clk" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path class="pg-hh" d="M12 12V8.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="48s" repeatCount="indefinite"/></path><path class="pg-hm" d="M12 12V6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="4s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>';
-function pgRefLine(){ const r = String(_pg.reference || ''); return r ? `<p class="pg-ref">Ref: ${esc(r.length > 20 ? r.slice(0, 18) + '…' : r)}</p>` : ''; }
 var _pgTick = 0;
 function pgStopTimer(){ if (_pgTick) { clearInterval(_pgTick); _pgTick = 0; } }
 function pgSet(view, html){
   pgStopTimer();
-  if (_pgSwapTimer) { clearTimeout(_pgSwapTimer); _pgSwapTimer = 0; }
   _pg.view = view;
   const body = $('pgBody'); if (body) body.innerHTML = html;
   const el = $('payScreen'); if (el) el.scrollTop = 0;
 }
-// The loader that takes the tick's place two seconds after "Payment Initiated!": twelve blades, the newest one dark and the rest fading out behind it, turning in 12 steps.
-var PG_SPINNER = '<span class="pg-ico pg-spinner"><svg viewBox="-24 -24 48 48" aria-hidden="true"><g class="pg-sp"><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(0)" fill="#fff" fill-opacity="1.00" stroke="#fff" stroke-opacity="1.00" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(30)" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-opacity="0.12" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(60)" fill="#fff" fill-opacity="0.20" stroke="#fff" stroke-opacity="0.20" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(90)" fill="#fff" fill-opacity="0.28" stroke="#fff" stroke-opacity="0.28" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(120)" fill="#fff" fill-opacity="0.36" stroke="#fff" stroke-opacity="0.36" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(150)" fill="#fff" fill-opacity="0.44" stroke="#fff" stroke-opacity="0.44" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(180)" fill="#fff" fill-opacity="0.52" stroke="#fff" stroke-opacity="0.52" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(210)" fill="#fff" fill-opacity="0.60" stroke="#fff" stroke-opacity="0.60" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(240)" fill="#fff" fill-opacity="0.68" stroke="#fff" stroke-opacity="0.68" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(270)" fill="#fff" fill-opacity="0.76" stroke="#fff" stroke-opacity="0.76" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(300)" fill="#fff" fill-opacity="0.84" stroke="#fff" stroke-opacity="0.84" stroke-width="1.6" stroke-linejoin="round"/><path d="M-2.19 -10.78 L-4.39 -21.56 L4.39 -21.56 L2.19 -10.78Z" transform="rotate(330)" fill="#fff" fill-opacity="0.92" stroke="#fff" stroke-opacity="0.92" stroke-width="1.6" stroke-linejoin="round"/></g></svg></span>';
-var _pgSwapTimer = 0;
+// ── The views of the polling screen: the app's own look (blue header with an X, white cards), a ripple loader, three steps and the details ──
+var PP_PHONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.6"/><path d="M10.6 18h2.8"/></svg>';
+var PP_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.6l4.6 4.6L19 7.4"/></svg>';
+var PP_CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+var PP_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.4V12l3.2 2"/></svg>';
+function ppPhone(p){ const t = String(p || ''); const m = /^(\+\d{3})(\d{3})(\d{3})(\d{3})$/.exec(t); return m ? m.slice(1).join(' ') : t; }
+function ppLoader(){ return '<div class="pp-ld" aria-hidden="true"><i></i><i></i><i></i><span class="pp-disc">' + PP_PHONE + '</span></div>'; }
+function ppSteps(now){   // now: 2 = waiting for the member to approve, 4 = all three done
+  const li = (n, text, extra) => `<li class="${n < now ? 'done' : n === now ? 'now' : ''}"><span class="pp-dot">${n < now ? PP_TICK : n}</span><span>${text}${extra || ''}</span></li>`;
+  return '<ul class="pp-steps">' + li(1, 'Request sent to your provider') + li(2, 'Approve the prompt on your phone', now === 2 ? '<span class="pp-dots"><b></b><b></b><b></b></span>' : '') + li(3, 'Money added to your wallet') + '</ul>';
+}
+function ppRows(){
+  const r = String(_pg.reference || ''), rows = [];
+  if (_pg.amount) rows.push(['Amount', pgMoney(_pg.amount)]);
+  if (_pg.phone) rows.push(['Deposit number', esc(ppPhone(_pg.phone))]);
+  if (_pg.network) rows.push(['Provider', esc(_pg.network)]);
+  if (r) rows.push(['Reference', esc(r.length > 22 ? r.slice(0, 20) + '…' : r)]);
+  return rows.length ? '<div class="pp-card"><dl class="pp-rows">' + rows.map(x => `<div><dt>${x[0]}</dt><dd>${x[1]}</dd></div>`).join('') + '</dl></div>' : '';
+}
 function pgShowInitiated(){
-  pgSet('initiated', pgCenterHtml(PG_CHECK, 'Payment Initiated!', 'Check your phone for a prompt from your mobile money provider. Approve it to complete the payment.', pgRefLine() + `<p class="pg-wait">${PG_CLOCK}<span>Awaiting mobile money approval</span></p><p class="pg-auto">Your payment is detected automatically. You do not need to refresh or press anything.</p>`));
-  const tok = _pg.token;
-  _pgSwapTimer = setTimeout(() => {
-    _pgSwapTimer = 0;
-    if (tok !== _pg.token || _pg.view !== 'initiated') return;
-    const ico = document.querySelector('#pgBody .pg-center > .pg-ico'); if (!ico) return;
-    ico.outerHTML = PG_SPINNER;
-  }, 2000);
+  pgSet('initiated', `<div class="pp-card pp-center">${ppLoader()}<h2>Approve on your phone</h2>${_pg.amount ? `<p class="pp-amt">${pgMoney(_pg.amount)}</p>` : ''}<p class="pp-msg">A mobile money prompt was sent${_pg.phone ? ' to <b>' + esc(ppPhone(_pg.phone)) + '</b>' : ''}. Enter your PIN to approve it.</p></div>
+    <div class="pp-card">${ppSteps(2)}</div>${ppRows()}
+    <p class="pp-note">Your payment is detected automatically. You can close this screen with the X: once you approve, the money is added to your wallet anyway.</p>`);
 }
 function pgShowUnknown(){
-  pgSet('unknown', pgCenterHtml(PG_CHECK, 'Still waiting', 'The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in Records later.', pgRefLine() + `<button class="pg-pay pg-small" type="button" onclick="pgHome()">Back to Home</button>`));
+  pgSet('unknown', `<div class="pp-card pp-center"><div class="pp-res wait">${PP_CLOCK}</div><h2>Still waiting</h2><p class="pp-msg">The payment has not been confirmed yet and nothing is lost. If you approve it, your balance updates on its own; you can also look in your records later.</p><button class="pp-btn" type="button" onclick="pgHome()">Back to Home</button></div>${ppRows()}`);
 }
 function pgShowFailed(msg){
-  pgSet('failed', pgCenterHtml(PG_CROSS, 'Payment failed', msg || 'The payment did not go through. Nothing was taken from you.', `<button class="pg-pay pg-small" type="button" onclick="pgAgain()">Try again</button><button class="pg-ghost" type="button" onclick="pgHome()">Back to Home</button>`));
+  pgSet('failed', `<div class="pp-card pp-center"><div class="pp-res bad">${PP_CROSS}</div><h2 style="color:#e0334c">Payment failed</h2><p class="pp-msg">${esc(msg || 'The payment did not go through. Nothing was taken from you.')}</p><button class="pp-btn" type="button" onclick="pgAgain()">Try again</button><button class="pp-btn ghost" type="button" onclick="pgHome()">Back to Home</button></div>${ppRows()}`);
 }
-window.openDepositPolling = function(depositId, reference){
+function pgShowDone(){
+  pgSet('done', `<div class="pp-card pp-center"><div class="pp-res ok">${PP_TICK}</div><h2 style="color:#17a85a">Deposit received</h2>${_pg.amount ? `<p class="pp-amt">${pgMoney(_pg.amount)}</p>` : ''}<p class="pp-msg">Your payment was approved and the money has been added to your wallet.</p><button class="pp-btn" type="button" onclick="pgHome()">Back to Home</button></div><div class="pp-card">${ppSteps(4)}</div>${ppRows()}`);
+}
+window.openDepositPolling = function(depositId, reference, info){
   const el = $('payScreen'); if (!el) return;
   const token = ++_pg.token;
-  _pg = { view: 'initiated', depositId: String(depositId), reference: String(reference || ''), token };
+  info = info || {};
+  _pg = { view: 'initiated', depositId: String(depositId), reference: String(reference || ''), amount: Number(info.amount) || 0, phone: String(info.phone || ''), network: String(info.network || ''), token };
   el.classList.add('show'); el.setAttribute('aria-hidden', 'false');
   try { document.title = pgTitle(); } catch (_) {}
   pgLockPasswordBoxes(true);
@@ -5884,9 +5889,10 @@ async function pgApply(r, token){
   if (!r || r.status !== 'success') return false;
   if (r.state === 'matched') {
     refreshTransactionsCache().catch(() => {});
-    _pg.token++; _pg.view = 'done';    // the poll loops stop; the page stays up for the moment below
-    ckSuccessToast('Success');
-    setTimeout(() => { if (pgOpen()) pgHome(); }, 2200);
+    _pg.token++;    // the poll loops stop; the Deposit received view stays up for a few seconds, or until Back to Home
+    pgShowDone();
+    (async () => { try { const a = await api('/account'); if (a.status === 'success') { STATE.account = a.account; try { patchHomeBalances(); } catch (_) {} } } catch (_) {} })();
+    setTimeout(() => { if (pgOpen() && _pg.view === 'done') pgHome(); }, 6000);
     return true;
   }
   if (r.state === 'failed') { refreshTransactionsCache().catch(() => {}); pgShowFailed(r.message); return true; }

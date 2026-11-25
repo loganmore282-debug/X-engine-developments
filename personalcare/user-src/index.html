@@ -2367,65 +2367,67 @@ body{background-attachment:fixed;}
 #maintScreen .mt-title{margin:0 0 15.7px;font-size:26px;line-height:32px;font-weight:700;color:#323b47;}
 #maintScreen .mt-msg{margin:0;font-size:15.43px;line-height:25.15px;font-weight:400;color:#55565b;}
 
-/* ── The payment page (/payment/<order number>): dark purple, built from the owner's screenshots ── */
-#payScreen{position:fixed;inset:0;z-index:620;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(135deg,#0b0b16 0%,#110a3d 50%,#090913 100%);color:#fff;font-family:'DM Sans','Roboto',system-ui,sans-serif;}
+/* ── The polling screen (after Pay on Deposit): the app's own blue and white, a header bar with an X, ripple loader, steps and details ── */
+#payScreen{position:fixed;inset:0;z-index:620;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;background:linear-gradient(180deg,#f3f4ff 0%,#ececef 100%);color:#1c2540;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 #payScreen.show{display:block;}
+#payScreen .pp-hd{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:center;height:44px;background:var(--ck-blue);color:#fff;}
+#payScreen .pp-hd h1{margin:0;font-size:16.8px;font-weight:700;color:#fff;}
+#payScreen .pp-x{position:absolute;right:0;top:0;width:48px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#payScreen .pp-x svg{width:22px;height:22px;}
+#payScreen .pg-wrap{box-sizing:border-box;max-width:480px;margin:0 auto;padding:16px 15px 28px;}
+#payScreen .pp-card{background:#fff;border-radius:18px;box-shadow:0 6px 22px rgba(0,50,157,.09);padding:22px 18px 20px;margin-bottom:14px;}
+#payScreen .pp-center{text-align:center;}
+#payScreen .pp-center h2{margin:0 0 6px;font-size:20px;line-height:26px;font-weight:700;color:#00329d;}
+#payScreen .pp-amt{margin:0 0 10px;font-size:26px;line-height:32px;font-weight:700;color:#1c2540;letter-spacing:.2px;}
+#payScreen .pp-msg{margin:0;font-size:14.5px;line-height:21px;color:#555b72;}
+#payScreen .pp-msg b{color:#1c2540;font-weight:700;white-space:nowrap;}
+/* the loader: three rings spreading out from a phone, one after the other */
+#payScreen .pp-ld{position:relative;width:104px;height:104px;margin:2px auto 16px;display:flex;align-items:center;justify-content:center;}
+#payScreen .pp-ld i{position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;border:2px solid #0a5ae6;opacity:0;animation:ppRipple 2.4s cubic-bezier(.2,.6,.3,1) infinite;}
+#payScreen .pp-ld i:nth-child(2){animation-delay:.8s;}
+#payScreen .pp-ld i:nth-child(3){animation-delay:1.6s;}
+#payScreen .pp-ld .pp-disc{position:relative;z-index:1;width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,#0a5ae6,#00329d);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,50,157,.32);animation:ppBeat 1.6s ease-in-out infinite;}
+#payScreen .pp-disc svg{width:28px;height:28px;color:#fff;}
+@keyframes ppRipple{0%{transform:scale(1);opacity:.55;}100%{transform:scale(1.7);opacity:0;}}
+@keyframes ppBeat{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+/* a result: a coloured disc with a tick or a cross */
+#payScreen .pp-res{width:72px;height:72px;margin:2px auto 16px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+#payScreen .pp-res svg{width:38px;height:38px;}
+#payScreen .pp-res.ok{background:#e4f8ec;color:#17a85a;}
+#payScreen .pp-res.bad{background:#fdecee;color:#e0334c;}
+#payScreen .pp-res.wait{background:#eaf1fe;color:#0a5ae6;}
+#payScreen .pp-res.ok svg path{stroke-dasharray:30;stroke-dashoffset:30;animation:ppDraw .5s .1s ease-out forwards;}
+@keyframes ppDraw{to{stroke-dashoffset:0;}}
+/* the three steps */
+#payScreen .pp-steps{list-style:none;margin:0;padding:6px 2px 2px;}
+#payScreen .pp-steps li{position:relative;display:flex;align-items:flex-start;gap:12px;padding:0 0 18px;font-size:14.5px;line-height:22px;color:#8b90a5;}
+#payScreen .pp-steps li:last-child{padding-bottom:2px;}
+#payScreen .pp-steps li::before{content:'';position:absolute;left:10.5px;top:24px;bottom:2px;width:2px;background:#e1e6f3;}
+#payScreen .pp-steps li:last-child::before{display:none;}
+#payScreen .pp-dot{position:relative;z-index:1;flex:0 0 22px;width:22px;height:22px;border-radius:50%;background:#e1e6f3;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;}
+#payScreen .pp-dot svg{width:13px;height:13px;}
+#payScreen .pp-steps li.done{color:#1c2540;}
+#payScreen .pp-steps li.done .pp-dot{background:#17a85a;}
+#payScreen .pp-steps li.done::before{background:#17a85a;}
+#payScreen .pp-steps li.now{color:#00329d;font-weight:700;}
+#payScreen .pp-steps li.now .pp-dot{background:#0a5ae6;animation:ppBeat 1.2s ease-in-out infinite;}
+#payScreen .pp-dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle;}
+#payScreen .pp-dots b{width:5px;height:5px;border-radius:50%;background:#0a5ae6;animation:ppDot 1.2s ease-in-out infinite;}
+#payScreen .pp-dots b:nth-child(2){animation-delay:.2s;}
+#payScreen .pp-dots b:nth-child(3){animation-delay:.4s;}
+@keyframes ppDot{0%,80%,100%{opacity:.25;transform:translateY(0);}40%{opacity:1;transform:translateY(-3px);}}
+/* the details */
+#payScreen .pp-rows{margin:0;padding:2px 0;}
+#payScreen .pp-rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:10px 2px;border-bottom:1px solid #eef0f7;font-size:14px;line-height:20px;}
+#payScreen .pp-rows>div:last-child{border-bottom:0;}
+#payScreen .pp-rows dt{margin:0;color:#7a809a;}
+#payScreen .pp-rows dd{margin:0;text-align:right;font-weight:700;color:#1c2540;overflow-wrap:anywhere;}
+#payScreen .pp-note{margin:4px 6px 0;text-align:center;font-size:12.5px;line-height:18px;color:#7a809a;}
+#payScreen .pp-btn{display:flex;align-items:center;justify-content:center;width:100%;height:46px;margin-top:16px;border:0;border-radius:23px;background:var(--ck-grad);color:#fff;font:700 15.5px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 16px rgba(0,50,157,.25);}
+#payScreen .pp-btn.ghost{background:#fff;color:#00329d;box-shadow:none;border:1.5px solid #cdd7ee;margin-top:10px;}
+@media (prefers-reduced-motion:reduce){#payScreen .pp-ld i,#payScreen .pp-disc,#payScreen .pp-dots b,#payScreen .pp-steps li.now .pp-dot{animation:none;}}
 /* A long unbroken word (a link in a message title or body, the About text) wraps inside its card instead of running off the screen */
 .msg-row .t1,.msg-detail h2,.msg-detail .content,.ck-about,.ck-msgbody{overflow-wrap:anywhere;min-width:0;}
-#payScreen{overscroll-behavior-y:contain;}
-#payScreen .pg-ptr{position:fixed;left:50%;top:0;z-index:5;width:38px;height:38px;margin:0;border-radius:50%;background:#2a2150;border:1px solid rgba(255,255,255,.18);color:#e9e7f7;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transform:translate(-50%,-46px);box-shadow:0 6px 18px rgba(0,0,0,.4);}
-#payScreen .pg-ptr svg{width:22px;height:22px;}
-#payScreen .pg-ptr.pg-spin svg{animation:ckLdSpin .8s linear infinite;}
-#payScreen .pg-wrap{min-height:100%;box-sizing:border-box;padding:46px 16px 24px;display:flex;flex-direction:column;align-items:center;}
-#payScreen .pg-brand{margin:0 0 18px;font-size:24px;line-height:30px;font-weight:700;letter-spacing:.01em;color:#fff;text-align:center;}
-#payScreen .pg-card{width:100%;max-width:340px;border:1px solid rgba(255,255,255,.13);border-radius:22px;overflow:hidden;background:linear-gradient(180deg,#1b1832 0%,#12101f 100%);box-shadow:0 20px 60px rgba(0,0,0,.45);}
-#payScreen .pg-head{padding:16px 20px 14px;background:linear-gradient(135deg,#2a1c66 0%,#2f1f6f 55%,#25185a 100%);border-bottom:1px solid rgba(255,255,255,.12);}
-#payScreen .pg-sub{display:block;margin-bottom:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.62);}
-#payScreen .pg-head h1{margin:0;font-size:20px;line-height:25px;font-weight:700;color:#fff;}
-#payScreen .pg-head{position:relative;}
-#payScreen .pg-time{position:absolute;top:13px;right:14px;display:flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;border-radius:13px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#e9e7f7;font:700 13px 'DM Sans','Roboto',sans-serif;font-variant-numeric:tabular-nums;}
-#payScreen .pg-time .pg-clk{width:14px;height:14px;}
-#payScreen .pg-time b{font-weight:700;letter-spacing:.02em;}
-#payScreen .pg-time.pg-low{background:rgba(255,93,115,.16);border-color:rgba(255,93,115,.45);color:#ff8a9b;}
-#payScreen .pg-body{padding:18px 20px 18px;}
-#payScreen .pg-l{display:block;margin:0 0 6px;font-size:12.5px;line-height:16px;font-weight:600;color:#a9a6c2;}
-#payScreen .pg-in{display:block;width:100%;height:42px;margin:0 0 14px;padding:0 14px;box-sizing:border-box;border:1px solid #514d70;border-radius:12px;background:linear-gradient(180deg,#38335a 0%,#2e2a4c 100%);color:#fff;font:400 15px 'DM Sans','Roboto',sans-serif;outline:0;-webkit-appearance:none;appearance:none;}
-#payScreen .pg-in::placeholder{color:#7b779a;}
-#payScreen .pg-in:focus{border-color:#7a4cf5;box-shadow:0 0 0 3px rgba(122,76,245,.38);}
-#payScreen .pg-locked{color:#e9e7f7;cursor:default;}
-#payScreen .pg-sel{position:relative;}
-#payScreen .pg-sel select{padding-right:38px;}
-#payScreen .pg-sel select:invalid{color:#7b779a;}
-#payScreen .pg-sel svg{position:absolute;right:13px;top:11px;width:20px;height:20px;color:#a09cbb;pointer-events:none;}
-#payScreen .pg-sel option{background:#2b2745;color:#fff;}
-#payScreen .pg-sum{margin:0 0 14px;padding:10px 15px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.035);}
-#payScreen .pg-sum>div{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;color:#9f9bb9;}
-#payScreen .pg-sum .pg-tot{margin-top:5px;padding-top:10px;border-top:1px solid rgba(255,255,255,.14);font-size:15px;font-weight:700;color:#fff;}
-#payScreen .pg-sum .pg-tot b{color:#b7f23f;font-weight:700;}
-#payScreen .pg-err{min-height:0;margin:0 0 10px;font-size:12.5px;line-height:17px;color:#ff7b8d;}
-#payScreen .pg-err:empty{display:none;}
-#payScreen .pg-pay{display:flex;align-items:center;justify-content:center;width:100%;height:44px;border:0;border-radius:14px;background:#6c38f0;color:#fff;font:700 15px 'DM Sans','Roboto',sans-serif;cursor:pointer;box-shadow:0 10px 26px -6px rgba(108,56,240,.55);}
-#payScreen .pg-pay.pg-busy,#payScreen .pg-pay:disabled{background:#4a29a5;color:#a99ad8;cursor:default;box-shadow:0 10px 26px -10px rgba(74,41,165,.5);}
-#payScreen .pg-ring{width:17px;height:17px;margin-right:10px;box-sizing:border-box;border:2.6px solid rgba(255,255,255,.35);border-top-color:transparent;border-radius:50%;animation:ckLdSpin .8s linear infinite;}
-#payScreen .pg-note{margin:14px 0 0;font-size:11.5px;line-height:17px;text-align:center;color:#6f6b8a;}
-#payScreen .pg-foot{margin:18px 0 0;font-size:12.5px;text-align:center;color:#524e6d;}
-#payScreen .pg-center{flex:1;width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-bottom:70px;}
-#payScreen .pg-ico{display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin-bottom:20px;border-radius:50%;background:#101c36;border:1px solid rgba(30,214,122,.16);}
-#payScreen .pg-ico svg{width:38px;height:38px;}
-#payScreen .pg-ico.pg-spinner{background:none;border:0;}
-#payScreen .pg-ico.pg-spinner svg{width:62px;height:62px;flex:0 0 auto;overflow:visible;}
-#payScreen .pg-sp{transform-origin:0 0;animation:pgSpin 1s steps(12,end) infinite;will-change:transform;}
-@keyframes pgSpin{to{transform:rotate(360deg);}}
-@media (prefers-reduced-motion:reduce){#payScreen .pg-sp{animation-duration:3s;}}
-#payScreen .pg-ico.pg-bad{background:#2a1424;border-color:rgba(255,93,115,.2);}
-#payScreen .pg-center h2{margin:0 0 10px;font-size:22px;line-height:28px;font-weight:700;color:#fff;}
-#payScreen .pg-msg{margin:0 0 18px;font-size:14.5px;line-height:21px;color:#a6a3bd;}
-#payScreen .pg-ref{margin:0 0 16px;font:400 12.5px/18px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;color:#56526f;}
-#payScreen .pg-auto{margin:14px auto 0;max-width:300px;font-size:12.5px;line-height:18px;color:#7a769a;text-align:center;}
-#payScreen .pg-wait{display:flex;align-items:center;justify-content:center;gap:9px;margin:0;font-size:13.5px;color:#7a769a;}
-#payScreen .pg-clk{width:18px;height:18px;}
-#payScreen .pg-small{width:auto;min-width:190px;padding:0 28px;margin-top:6px;}
-#payScreen .pg-ghost{margin-top:14px;border:0;background:none;color:#8f8bb0;font:500 13.5px 'DM Sans','Roboto',sans-serif;cursor:pointer;}
 </style>
 
 <script data-personalcare-idle>
@@ -2640,7 +2642,7 @@ window.ckToggleEye=function(b){var i=b.parentNode.querySelector('input');if(!i)r
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
 </div>
 
-<div id="payScreen" aria-hidden="true"><div class="pg-wrap" id="pgBody"></div></div>
+<div id="payScreen" aria-hidden="true"><header class="pp-hd"><h1>Deposit</h1><button class="pp-x" type="button" aria-label="Close" onclick="closePaymentPage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="pg-wrap" id="pgBody"></div></div>
 
 <div id="maintScreen" role="alert">
   <div class="mt-wrap">
