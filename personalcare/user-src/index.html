@@ -2034,7 +2034,19 @@ body{background-attachment:fixed;}
 .ck-pay:disabled{opacity:.7;}
 /* slide to pay: the round knob rides the button from the left to the right end */
 .ck-slide{position:relative;margin-top:15px;border-radius:25px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;}
-.ck-slide .ck-pay{margin-top:0;pointer-events:none;padding:0 58px 0 58px;}
+.ck-slide .ck-pay{margin-top:0;pointer-events:none;padding:0 50px 0 56px;font-size:16.5px;letter-spacing:.03em;white-space:nowrap;color:rgb(255 255 255 / calc(1 - var(--p,0) * 1.5));}
+.ck-slide.ld .ck-pay{color:#8d8e93;}
+/* the shine: a soft band of light travels across the bar from left to right, over the words, again and again (the usual "slide to pay" look) */
+.ck-slide::after{content:'';position:absolute;top:0;bottom:0;left:0;width:46%;pointer-events:none;background:linear-gradient(100deg,transparent 0%,rgba(255,255,255,.34) 50%,transparent 100%);transform:translateX(-120%);animation:ckShine 2.6s ease-in-out infinite;border-radius:25px;}
+@keyframes ckShine{0%,18%{transform:translateX(-120%);}78%,100%{transform:translateX(240%);}}
+.ck-slide.drag::after,.ck-slide.ld::after{display:none;}
+/* three chevrons at the right end, lighting up one after the other, point the way */
+.ck-slide .ck-hint{position:absolute;right:14px;top:0;height:49px;display:flex;align-items:center;gap:1px;color:#fff;pointer-events:none;opacity:calc(1 - var(--p,0) * 1.6);}
+.ck-slide .ck-hint svg{width:10px;height:17px;opacity:.25;animation:ckChev 1.5s ease-in-out infinite;}
+.ck-slide .ck-hint svg:nth-child(2){animation-delay:.2s;}
+.ck-slide .ck-hint svg:nth-child(3){animation-delay:.4s;}
+@keyframes ckChev{0%,100%{opacity:.2;}40%{opacity:1;}}
+.ck-slide.ld .ck-hint{display:none;}
 .ck-slide .ck-fill{position:absolute;left:0;top:0;height:49px;width:0;border-radius:25px;background:rgba(255,255,255,.2);pointer-events:none;}
 .ck-slide.anim .ck-fill,.ck-slide.anim .ck-knob{transition:width .24s ease,transform .24s ease;}
 .ck-slide .ck-knob{position:absolute;left:4px;top:4px;z-index:2;width:41px;height:41px;border-radius:50%;background:#fff;color:#00329d;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 9px rgba(0,0,0,.28);touch-action:none;cursor:grab;outline:none;-webkit-tap-highlight-color:transparent;}
@@ -2043,7 +2055,7 @@ body{background-attachment:fixed;}
 .ck-slide:not(.drag):not(.ld) .ck-knob svg{animation:ckNudge 1.6s ease-in-out infinite;}
 @keyframes ckNudge{0%,100%{transform:translateX(-1px);}50%{transform:translateX(3px);}}
 .ck-slide.ld .ck-knob,.ck-slide.ld .ck-fill{display:none;}
-@media (prefers-reduced-motion:reduce){.ck-slide:not(.drag):not(.ld) .ck-knob svg{animation:none;}}
+@media (prefers-reduced-motion:reduce){.ck-slide:not(.drag):not(.ld) .ck-knob svg,.ck-slide::after,.ck-slide .ck-hint svg{animation:none;}}
 .ck-notes{margin-top:55px;}
 .ck-notes p{margin:0 0 15px;padding:10px 15px;border-left:3px solid #00329d;background:#f0f7fd;font-size:13.9px;line-height:20px;padding-right:2px;}
 .ck-notes p.b{color:#0a6590;}

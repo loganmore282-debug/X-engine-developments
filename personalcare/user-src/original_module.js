@@ -5295,7 +5295,7 @@ function openDepositFormSheet(){
     <div class="ck-card ck-pays" id="depPays">
       ${['C'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
     </div>
-    <div class="ck-slide" id="depSlide"><button class="ck-pay" id="depSubmitBtn" type="button" tabindex="-1">Pay 0</button><span class="ck-fill" id="depFill"></span><span class="ck-knob" id="depKnob" role="button" tabindex="0" aria-label="Slide to pay, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
+    <div class="ck-slide" id="depSlide"><button class="ck-pay" id="depSubmitBtn" type="button" tabindex="-1">Slide to pay 0</button><span class="ck-fill" id="depFill"></span><span class="ck-hint" aria-hidden="true"><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg></span><span class="ck-knob" id="depKnob" role="button" tabindex="0" aria-label="Slide to pay, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
     <div class="ck-notes">
       <p class="b">The minimum deposit amount is ${esc(cur())} ${esc(ckNum(min))}</p>
       <p class="b">Recharge time 7 x 24 hours</p>
@@ -5438,7 +5438,7 @@ function syncDepositQuickAmt(){
   const val = parseMoneyInput(($('depAmount') || {}).value);
   _depChosenAmount = val;
   const payBtn = $('depSubmitBtn');
-  if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Pay ' + numGroup(Math.round(v), false), ckBalanceMs());
+  if (payBtn && !payBtn.disabled) ckTween(payBtn, val > 0 ? val : 0, v => 'Slide to pay ' + numGroup(Math.round(v), false), ckBalanceMs());
   const chips = $('depChips');
   if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
 }
@@ -5717,6 +5717,7 @@ function slideSet(sl, x, animate){
   sl.classList.toggle('anim', !!animate);
   k.style.transform = 'translateX(' + x + 'px)';
   if (f) f.style.width = (x + k.offsetWidth + 4) + 'px';
+  { const m = slideMax(sl); sl.style.setProperty('--p', m > 0 ? String(Math.min(1, x / m)) : '0'); }
 }
 function slideMax(sl){ const k = sl.querySelector('.ck-knob'); return Math.max(0, sl.clientWidth - (k ? k.offsetWidth : 0) - 8); }
 function slideReset(sl){ if (sl) { slideSet(sl, 0, true); const f = sl.querySelector('.ck-fill'); if (f) f.style.width = '0'; } }
@@ -5775,7 +5776,7 @@ window.submitDeposit = async function(){
   let r;
   try { r = await pgSealedPost('/deposit/marzpay', { amount, phone, network }); }
   catch (_) { r = null; }
-  finally { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Pay ' + numGroup(amount, false)); }
+  finally { ckLoadEnd(); ckPayLoading(submitBtn, false, 'Slide to pay ' + numGroup(amount, false)); }
   if (r && r.stale) return;
   if (!r || r.status !== 'success' || !r.depositId) return notify((r && r.message) || 'Could not start the payment. Please try again.');
   // The member backed out while the prompt was being sent: the payment still goes through on its own, so say nothing more here.
