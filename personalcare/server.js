@@ -2122,11 +2122,13 @@ const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try ag
 // standing rule, see setDepositStatusFailed()'s comment). Lists the real
 // possibilities instead of asserting one.
 const DEPOSIT_FAILED_MSG = 'This payment was not completed. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Please try again.';
+const UNSUPPORTED_NETWORK_MSG = 'This number could not be used for the payment. Check that the number is right and that the provider (MTN or Airtel) matches it, then try again.';
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
       /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(String(raw || '')))
     return PROVIDER_BUSY_MSG;
+  if (/unsupported[_ ]?network/i.test(String(raw || ''))) return UNSUPPORTED_NETWORK_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
 async function _marzParse(resp) {
@@ -2842,6 +2844,7 @@ function pesajetUserMsg(r, fallback) {
   const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
   if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(raw))
     return PROVIDER_BUSY_MSG;
+  if (/unsupported[_ ]?network/i.test(String(raw || ''))) return UNSUPPORTED_NETWORK_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
 // HMAC-SHA256, hex, over the payload with its own `signature` field removed,

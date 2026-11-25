@@ -120,3 +120,5 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 - Admin Settings > Payments: recharge gateway "TavuPay"; with withdrawals set to "Follow", payouts still go through MarzPay; pick "Always automatic (TavuPay sends payouts)" to send them through TavuPay.
 - Test: `test-tavupay.js`. Admin cache `personalcare-admin-shell-v157`.
 
+
+- Airtel prefixes on the deposit page: 70 / 75 / 74 / 73 / 20 (it picks Airtel by itself for a 073 number and sends the stored network, which PesaJet obeys). A gateway's "unsupported network" answer reaches the member as a plain sentence (`UNSUPPORTED_NETWORK_MSG`), never the raw code. Member cache `personalcare-shell-v436`.

@@ -5320,7 +5320,7 @@ function openDepositFormSheet(){
   { const b = $('depBalance'); if (b) { b._v = 0; ckTween(b, Number(bal) || 0, v => numGroup(v, true), ckBalanceMs()); } }
 }
 // The deposit number starts as the member's own number (they can change it to any mobile money number) and the provider is picked from its
-// first digits: MTN 77 / 78 / 76 / 39, Airtel 70 / 75 / 74 / 20. A number that says nothing leaves both unpicked, and Pay asks.
+// first digits: MTN 77 / 78 / 76 / 39, Airtel 70 / 75 / 74 / 73 / 20. A number that says nothing leaves both unpicked, and Pay asks.
 function depDefaultPhone(){
   const local = localDigits((STATE.account || {}).phone || '');
   return local ? '0' + local : '';
@@ -5329,7 +5329,7 @@ function depNetFor(raw){
   const local = localDigits(raw) || String(raw || '').replace(/\D/g, '').replace(/^0+/, '');
   const two = local.slice(0, 2);
   if (['77', '78', '76', '39'].includes(two)) return 'MTN Mobile Money';
-  if (['70', '75', '74', '20'].includes(two)) return 'Airtel Money';
+  if (['70', '75', '74', '73', '20'].includes(two)) return 'Airtel Money';
   return '';
 }
 window.syncDepositNet = function(){
