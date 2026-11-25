@@ -5736,7 +5736,11 @@ window.submitDeposit = async function(){
   if (!r || r.status !== 'success' || !r.depositId) return notify((r && r.message) || 'Could not start the payment. Please try again.');
   // The member backed out while the prompt was being sent: the payment still goes through on its own, so say nothing more here.
   if (!($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit' && window._sheetSeq === seq)) { refreshTransactionsCache().catch(() => {}); return; }
+  // Closing the Deposit page takes its own history step away a moment later (history.back()). That step must be let through without closing the
+  // polling screen that opens right now, or the prompt is sent and the member sees nothing.
+  const hadStep = !!(history.state && history.state.sheet);
   closeSheet({ fromAction: true });
+  if (hadStep) _dlgIgnore();
   openDepositPolling(r.depositId, r.reference || '');
 };
 // ── THE POLLING SCREEN ──

@@ -58,6 +58,12 @@ async function main(){
   ok(scr.classList.contains('show')&&w.eval('_pg.view')==='initiated'&&w.eval('_pg.depositId')==='dep1','the polling screen is up');
   ok(/Payment Initiated/.test(d.getElementById('pgBody').textContent)&&/Awaiting mobile money approval/.test(d.getElementById('pgBody').textContent)&&/detected automatically/.test(d.getElementById('pgBody').textContent),'it says the prompt is on the phone and the payment is detected automatically');
   ok(!d.getElementById('sheetBg').classList.contains('show'),'the Deposit page is closed behind it');
+  // closing the Deposit page takes its history step away; that step must NOT close the polling screen that has just opened (it did: the prompt
+  // was sent and the member saw nothing)
+  await new Promise(r=>setTimeout(r,120));
+  ok(scr.classList.contains('show')&&w.eval('_pg.view')==='initiated','the polling screen is still up after the Deposit page\'s own Back step has settled');
+  await new Promise(r=>setTimeout(r,900));
+  ok(scr.classList.contains('show'),'and still up a second later');
   // the answer: failed -> the failed screen with Try again; matched -> success and home
   w.depositStatusHold=async()=>({status:'success',state:'failed',message:'Declined by the provider.'});
   const tok=w.eval('_pg.token');await w.eval('pgApply')({status:'success',state:'failed',message:'Declined by the provider.'},tok);
