@@ -5306,7 +5306,7 @@ function openDepositFormSheet(){
     <div class="ck-card ck-pays" id="depPays">
       ${['C'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
     </div>
-    <div class="ck-slide" id="depSlide"><button class="ck-pay" id="depSubmitBtn" type="button" tabindex="-1">Slide to pay 0</button><span class="ck-fill" id="depFill"></span><span class="ck-hint" aria-hidden="true"><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg></span><span class="ck-knob" id="depKnob" role="button" tabindex="0" aria-label="Slide to pay, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
+    <div class="ck-slide" id="depSlide" data-go="submitDeposit"><button class="ck-pay" id="depSubmitBtn" type="button" tabindex="-1">Slide to pay 0</button><span class="ck-fill" id="depFill"></span><span class="ck-hint" aria-hidden="true"><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg></span><span class="ck-knob" id="depKnob" role="button" tabindex="0" aria-label="Slide to pay, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
     <div class="ck-notes">
       <p class="b">The minimum deposit amount is ${esc(cur())} ${esc(ckNum(min))}</p>
       <p class="b">Recharge time 7 x 24 hours</p>
@@ -5736,7 +5736,7 @@ async function slideGo(sl){
   if (_slideBusy || !sl || sl.classList.contains('ld')) { slideReset(sl); return; }
   _slideBusy = true;
   slideSet(sl, slideMax(sl), true);
-  try { await window.submitDeposit(); } catch (_) {} finally { _slideBusy = false; slideReset(sl); }
+  try { await window[sl.getAttribute('data-go') || 'submitDeposit'](); } catch (_) {} finally { _slideBusy = false; slideReset(sl); }
 }
 (function(){
   let drag = null;
@@ -6048,7 +6048,7 @@ window.openWithdrawSheet = async function(){
     const block = $('witWalletBlock');
     if (block) block.innerHTML = witWalletBlockHtml(s);
     const submitBtn = $('witSubmitBtn');
-    if (submitBtn) submitBtn.disabled = _withdrawSubmitting;
+    if (submitBtn) { submitBtn.disabled = _withdrawSubmitting; const ss = submitBtn.closest && submitBtn.closest('.ck-slide'); if (ss) ss.classList.toggle('ld', _withdrawSubmitting); }
   }
 };
 // ── The withdraw window, client side ────────────────────────────────────
@@ -6113,7 +6113,7 @@ function paintWithdrawSheet(s){
         <h4>Fee: ${fee}%</h4>
         <p>Withdrawals are processed within 30 minutes to 24 hours; you will receive <b>${esc(cur())}</b> <span id="witReceive">0</span>.</p>
       </div>
-      <button class="ck-pay" id="witSubmitBtn" type="button" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Withdraw 0</button>
+      <div class="ck-slide${_withdrawSubmitting ? ' ld' : ''}" id="witSlide" data-go="submitWithdraw"><button class="ck-pay" id="witSubmitBtn" type="button" tabindex="-1" ${_withdrawSubmitting ? 'disabled' : ''}>Slide to withdraw 0</button><span class="ck-fill" id="witFill"></span><span class="ck-hint" aria-hidden="true"><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg><svg viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3l7 7-7 7"/></svg></span><span class="ck-knob" id="witKnob" role="button" tabindex="0" aria-label="Slide to withdraw, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
     </div>
     <div class="ck-card ck-wdcard2" id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="ck-notes ck-wnotes">
@@ -6138,7 +6138,7 @@ window.syncWithdrawReceiveAmt = function(){
   const amount = parseMoneyInput(($('witAmount') || {}).value);
   const got = amount > 0 ? amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100) : 0;
   const btn = $('witSubmitBtn');
-  if (btn && !btn.disabled) ckTween(btn, got, v => 'Withdraw ' + numGroup(Math.round(v), false), ckBalanceMs());
+  if (btn && !btn.disabled) ckTween(btn, got, v => 'Slide to withdraw ' + numGroup(Math.round(v), false), ckBalanceMs());
   const rc = $('witReceive'); if (rc) rc.textContent = ckNum(got);
 };
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
@@ -6197,17 +6197,19 @@ window.submitWithdraw = async function(){
   _withdrawSubmitting = true;
   if (submitBtn._raf) { cancelAnimationFrame(submitBtn._raf); submitBtn._raf = 0; }   // a count-up still running would overwrite "Submitting…" with a partial amount
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
+  { const sl = submitBtn.closest && submitBtn.closest('.ck-slide'); if (sl) sl.classList.add('ld'); }
   let r;
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
   finally {
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Withdraw ' + numGroup(amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100), false);
+    { const sl = submitBtn.closest && submitBtn.closest('.ck-slide'); if (sl) { sl.classList.remove('ld'); slideReset(sl); } }
+    submitBtn.disabled = false; submitBtn.textContent = 'Slide to withdraw ' + numGroup(amount - Math.round(amount * withdrawalFeePct(STATE.settings || {}) / 100), false);
     // A background /bank/list landing mid-request can have repainted the
     // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
     // element in the DOM -- disabled state is only ever about an in-flight
     // request now, not wallet presence, so the new one is simply enabled.
     const current = $('witSubmitBtn');
-    if (current && current !== submitBtn) current.disabled = false;
+    if (current && current !== submitBtn) { current.disabled = false; const cs = current.closest && current.closest('.ck-slide'); if (cs) cs.classList.remove('ld'); }
   }
   if (r.stale) return;
   if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');

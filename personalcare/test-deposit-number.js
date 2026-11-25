@@ -44,6 +44,18 @@ async function main(){
     d.getElementById('depSubmitBtn').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,30));
     ok(go===1,'a tap on the bar does not');
     w.submitDeposit=orig; }
+  ok(d.getElementById('depSlide').getAttribute('data-go')==='submitDeposit','the deposit slider starts submitDeposit');
+  // the Withdraw page has the same slider
+  { w.eval('STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}]');
+    w.eval('openWithdrawSheet()');
+    const sl=d.getElementById('witSlide'), btn=d.getElementById('witSubmitBtn');
+    ok(sl&&sl.getAttribute('data-go')==='submitWithdraw'&&d.getElementById('witKnob')&&btn&&!btn.getAttribute('onclick')&&/^Slide to withdraw/.test(btn.textContent),'Withdraw is a slide-to-withdraw control (the bar itself has no tap action)');
+    let go=0; const orig=w.submitWithdraw; w.submitWithdraw=async()=>{go++;};
+    d.getElementById('witKnob').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await new Promise(r=>setTimeout(r,30));
+    ok(go===1,'Enter on the withdraw knob starts the withdrawal');
+    btn.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,30));
+    ok(go===1,'a tap on the withdraw bar does not');
+    w.submitWithdraw=orig; w.eval('closeSheet({fromAction:true})'); w.eval('openDepositFormSheet()'); d.getElementById('depAmount').value='30000'; }
   // Pay: validations first, nothing is sent
   const sent=[];const notes=[];
   w.pgSealedPost=async(path,body)=>{sent.push([path,body]);return {status:'success',depositId:'dep1',reference:'REF-1'};};

@@ -72,7 +72,7 @@ async function main(){
   const bank=deferred();w.api=()=>bank.promise;
   const opened=w.openWithdrawSheet();
   const input=d.querySelector('#witAmount');input.value='15,000';input.focus();w.eval('STATE.settings.balanceCountSeconds=1');w.syncWithdrawReceiveAmt();await new Promise(r=>setTimeout(r,1250));
-  assert.equal(d.querySelector('#witSubmitBtn').textContent,'Withdraw 15,000','the Withdraw button shows the amount typed (what the member receives) live');
+  assert.equal(d.querySelector('#witSubmitBtn').textContent,'Slide to withdraw 15,000','the Withdraw slider shows the amount typed (what the member receives) live');
   bank.resolve({status:'success',accounts:[{id:'wallet',network:'MTN Mobile Money',phone:'256771234567',holder:'Test Member'}]});await opened;
   assert.equal(d.querySelector('#witAmount'),input);assert.equal(input.value,'15,000');
   assert.match(d.querySelector('.ck-feebox').textContent,/Fee: 0%/);assert.match(d.querySelector('.ck-feebox').textContent,/30 minutes to 24 hours/);assert(!d.querySelector('#witPin'),'no Trade Password is asked on the Withdraw screen');
