@@ -45,6 +45,8 @@ async function main(){
     ok(go===1,'a tap on the bar does not');
     w.submitDeposit=orig; }
   ok(d.getElementById('depSlide').getAttribute('data-go')==='submitDeposit','the deposit slider starts submitDeposit');
+  { const css=fs.readFileSync(__dirname+'/user-src/index.html','utf8');
+    ok(/\.ck-slide \.ck-pay\{margin:0 !important;height:49px !important;line-height:49px !important/.test(css),'the slider\'s bar has its own fixed size that no page-specific button rule (like the Withdraw page\'s) can change: the knob, chevrons and shine always line up with the bar'); }
   // the Withdraw page has the same slider
   { w.eval('STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}]');
     w.eval('openWithdrawSheet()');
