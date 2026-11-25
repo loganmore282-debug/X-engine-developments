@@ -36,6 +36,14 @@ async function main(){
   phone().value='0391234567';w.syncDepositNet();ok(nets().find(b=>b.classList.contains('on')).dataset.n==='MTN Mobile Money','039 = MTN');
   w.pickDepNet(nets()[1]);ok(nets()[1].classList.contains('on')&&!nets()[0].classList.contains('on'),'the member can pick the provider by hand');
   ok(!d.getElementById('pgPayBtn')&&!d.getElementById('pgPtr'),'no separate payment page: no second form, no pull-down refresh');
+  // the Pay button is a slider: the knob has to be slid to the right end (or Enter pressed on it); a tap on the bar does nothing
+  ok(d.querySelector('#depSlide #depSubmitBtn')&&d.getElementById('depKnob')&&!d.getElementById('depSubmitBtn').getAttribute('onclick'),'Pay is a slide-to-pay control (the bar itself has no tap action)');
+  { let go=0; const orig=w.submitDeposit; w.submitDeposit=async()=>{go++;};
+    d.getElementById('depKnob').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await new Promise(r=>setTimeout(r,30));
+    ok(go===1,'Enter on the knob starts the payment (keyboard way of sliding)');
+    d.getElementById('depSubmitBtn').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,30));
+    ok(go===1,'a tap on the bar does not');
+    w.submitDeposit=orig; }
   // Pay: validations first, nothing is sent
   const sent=[];const notes=[];
   w.pgSealedPost=async(path,body)=>{sent.push([path,body]);return {status:'success',depositId:'dep1',reference:'REF-1'};};

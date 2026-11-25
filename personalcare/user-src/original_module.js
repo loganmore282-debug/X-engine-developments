@@ -5295,7 +5295,7 @@ function openDepositFormSheet(){
     <div class="ck-card ck-pays" id="depPays">
       ${['C'].map((k, i) => `<button type="button" data-m="${k}" class="${i === 0 ? 'on' : ''}${k === hotKey ? ' hot' : ''}" onclick="pickPayLabel(this)">${k === hotKey ? hot : ''}<span>${esc(brandName())} Pay -${k}</span></button>`).join('')}
     </div>
-    <button class="ck-pay" id="depSubmitBtn" type="button" onclick="submitDeposit()">Pay 0</button>
+    <div class="ck-slide" id="depSlide"><button class="ck-pay" id="depSubmitBtn" type="button" tabindex="-1">Pay 0</button><span class="ck-fill" id="depFill"></span><span class="ck-knob" id="depKnob" role="button" tabindex="0" aria-label="Slide to pay, or press Enter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6"/><path d="M12.5 6l6 6-6 6" opacity=".55"/></svg></span></div>
     <div class="ck-notes">
       <p class="b">The minimum deposit amount is ${esc(cur())} ${esc(ckNum(min))}</p>
       <p class="b">Recharge time 7 x 24 hours</p>
@@ -5699,6 +5699,7 @@ function setDepositStatusUnknown(){
 // The grey "Loading" state of a Pay button (a 12-spoke spinner and the word), restored to its own label afterwards.
 function ckPayLoading(btn, on, label){
   if (!btn) return;
+  { const sl = btn.closest && btn.closest('.ck-slide'); if (sl) { sl.classList.toggle('ld', !!on); if (!on) slideReset(sl); } }
   if (on) {
     if (btn._raf) { cancelAnimationFrame(btn._raf); btn._raf = 0; }   // a count-up still running must not write its figure over "Loading"
     btn.disabled = true; btn.classList.add('ck-pay-ld');
@@ -5707,6 +5708,49 @@ function ckPayLoading(btn, on, label){
     btn.disabled = false; btn.classList.remove('ck-pay-ld'); btn.textContent = label; btn._v = parseMoneyInput(label);
   }
 }
+// ── SLIDE TO PAY ──
+// The Pay button on Deposit is a slider (owner: "make when one can slide to right of that pay button to proceed"): drag the round knob from the left
+// to the right end and the payment starts; let go early and it springs back. Enter / Space on the knob does the same for keyboards.
+var _slideBusy = false;
+function slideSet(sl, x, animate){
+  const k = sl.querySelector('.ck-knob'), f = sl.querySelector('.ck-fill'); if (!k) return;
+  sl.classList.toggle('anim', !!animate);
+  k.style.transform = 'translateX(' + x + 'px)';
+  if (f) f.style.width = (x + k.offsetWidth + 4) + 'px';
+}
+function slideMax(sl){ const k = sl.querySelector('.ck-knob'); return Math.max(0, sl.clientWidth - (k ? k.offsetWidth : 0) - 8); }
+function slideReset(sl){ if (sl) { slideSet(sl, 0, true); const f = sl.querySelector('.ck-fill'); if (f) f.style.width = '0'; } }
+async function slideGo(sl){
+  if (_slideBusy || !sl || sl.classList.contains('ld')) { slideReset(sl); return; }
+  _slideBusy = true;
+  slideSet(sl, slideMax(sl), true);
+  try { await window.submitDeposit(); } catch (_) {} finally { _slideBusy = false; slideReset(sl); }
+}
+(function(){
+  let drag = null;
+  document.addEventListener('pointerdown', e => {
+    const k = e.target && e.target.closest ? e.target.closest('.ck-knob') : null; if (!k) return;
+    const sl = k.closest('.ck-slide'); if (!sl || sl.classList.contains('ld') || _slideBusy) return;
+    drag = { sl, k, x0: e.clientX, max: slideMax(sl), x: 0 };
+    try { k.setPointerCapture(e.pointerId); } catch (_) {}
+    sl.classList.add('drag'); e.preventDefault();
+  });
+  document.addEventListener('pointermove', e => {
+    if (!drag) return;
+    drag.x = Math.max(0, Math.min(drag.max, e.clientX - drag.x0));
+    slideSet(drag.sl, drag.x, false); e.preventDefault();
+  }, { passive: false });
+  const end = () => {
+    if (!drag) return;
+    const d = drag; drag = null; d.sl.classList.remove('drag');
+    if (d.max > 0 && d.x >= d.max * 0.88) slideGo(d.sl); else slideReset(d.sl);
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.classList && e.target.classList.contains('ck-knob')) { e.preventDefault(); slideGo(e.target.closest('.ck-slide')); }
+  });
+})();
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
   if (!submitBtn || submitBtn.disabled || !$('depAmount')) return;

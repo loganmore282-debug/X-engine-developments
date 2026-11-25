@@ -2032,6 +2032,18 @@ body{background-attachment:fixed;}
 @keyframes ckSpoke{to{transform:rotate(360deg);}}
 .ck-pay{display:block;width:100%;height:49px;margin-top:15px;border:0;border-radius:25px;background:var(--ck-grad);color:#fff;font:500 18px/49px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:.06em;box-shadow:0 9px 16px -8px rgba(0,50,157,.55);cursor:pointer;}
 .ck-pay:disabled{opacity:.7;}
+/* slide to pay: the round knob rides the button from the left to the right end */
+.ck-slide{position:relative;margin-top:15px;border-radius:25px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;}
+.ck-slide .ck-pay{margin-top:0;pointer-events:none;padding:0 58px 0 58px;}
+.ck-slide .ck-fill{position:absolute;left:0;top:0;height:49px;width:0;border-radius:25px;background:rgba(255,255,255,.2);pointer-events:none;}
+.ck-slide.anim .ck-fill,.ck-slide.anim .ck-knob{transition:width .24s ease,transform .24s ease;}
+.ck-slide .ck-knob{position:absolute;left:4px;top:4px;z-index:2;width:41px;height:41px;border-radius:50%;background:#fff;color:#00329d;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 9px rgba(0,0,0,.28);touch-action:none;cursor:grab;outline:none;-webkit-tap-highlight-color:transparent;}
+.ck-slide .ck-knob svg{width:22px;height:22px;}
+.ck-slide .ck-knob:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,.6),0 3px 9px rgba(0,0,0,.28);}
+.ck-slide:not(.drag):not(.ld) .ck-knob svg{animation:ckNudge 1.6s ease-in-out infinite;}
+@keyframes ckNudge{0%,100%{transform:translateX(-1px);}50%{transform:translateX(3px);}}
+.ck-slide.ld .ck-knob,.ck-slide.ld .ck-fill{display:none;}
+@media (prefers-reduced-motion:reduce){.ck-slide:not(.drag):not(.ld) .ck-knob svg{animation:none;}}
 .ck-notes{margin-top:55px;}
 .ck-notes p{margin:0 0 15px;padding:10px 15px;border-left:3px solid #00329d;background:#f0f7fd;font-size:13.9px;line-height:20px;padding-right:2px;}
 .ck-notes p.b{color:#0a6590;}
