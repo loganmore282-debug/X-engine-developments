@@ -3032,7 +3032,7 @@ async function liveRefreshVisible(){
     if (pr.status === 'success') {
       STATE.products = pr.products;
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
-        // The same list as the page itself: only the products of the tab that is open (Daily income or Daily wage).
+        // The same list as the page itself: only the products of the tab that is open (Hourly income or Locking).
         const list = homeTabProducts();
         $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">NO DATA</div>';
         startProductCountdowns();
@@ -3219,7 +3219,7 @@ function showAnnouncementNow(){
   const hours = s.withdrawWindowEnabled && s.withdrawOpenFrom && s.withdrawOpenTo ? s.withdrawOpenFrom + '\u2013' + s.withdrawOpenTo : '24 hours';
   const rows = [
     'Daily income, daily withdrawal',
-    'Earnings every 24 hours',
+    'Earnings every hour',
     'Withdrawal hours: ' + hours,
     'Minimum withdrawal: ' + money(s.minWithdraw),
     'Taxes and fees: ' + (Number(s.withdrawFeePct) || 0) + '%'
@@ -3392,12 +3392,12 @@ function vProductCardHtml(p){
   return `
   <article class="v-card">
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || ckIsWage(p)) ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${limit > 0 ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
       <dl class="v-rows${[ckMoney(p.price), ckMoney(daily), ckMoney(expected)].some(v => v.length > 11) ? ' tight' : ''}">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
         ${ckRow('Days', String(cycle))}
-        ${ckRow('Total profit', ckMoney(expected))}
+        ${ckRow('Total return', ckMoney(expected))}
       </dl>
     </div>
     <div class="v-card-f">${vBuyHtml(p)}</div>
@@ -3452,12 +3452,12 @@ document.addEventListener('visibilitychange', () => {
   if (STATE.homeTab === 'wage') { STATE.homeTab = 'income'; if (STATE.page === 'home' && $('pageHost') && $('pageHost').querySelector('.v-home')) paintHome(); }
   if (STATE.incomeTab === 'wage') { STATE.incomeTab = 'income'; if (STATE.page === 'assets' && $('pageHost') && $('pageHost').querySelector('.ck-income')) paintAssets(); }
 });
-// A task product (Daily wage) is one saved as such, or any product that costs nothing.
+// Locking products are the ones saved as such; the rest are Hourly income. A product with no price cannot be bought, so it is never listed.
 function homeTabProducts(){
   const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
-  return (STATE.products || []).filter(p => p.active !== false && (ckIsWage(p) ? 'wage' : 'income') === tab);
+  return (STATE.products || []).filter(p => p.active !== false && Number(p.price) > 0 && (ckIsWage(p) ? 'wage' : 'income') === tab);
 }
-function ckIsWage(p){ return !!p && (p.category === 'wage' || Number(p.price) === 0); }
+function ckIsWage(p){ return !!p && p.category === 'wage'; }
 function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
 window.setHomeTab = setHomeTab;
 function paintHome(){
@@ -3474,8 +3474,8 @@ function paintHome(){
     <button onclick="openGroupLink()"><span class="ck-ic" style="--c:#7f59fa">${CK_ICONS.group}</span><b>Group</b></button>
   </div>
   <div class="ck-tabs" role="tablist">
-    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setHomeTab('income')">Daily Income</button>
-    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setHomeTab('wage')">Daily wage</button>
+    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setHomeTab('income')">Hourly Income</button>
+    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setHomeTab('wage')">Locking</button>
   </div>
   <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">NO DATA</div>' : '')}</div>
 </div>`;
@@ -3524,7 +3524,7 @@ function planFigures(p){
   const expected = (Number.isFinite(mult) && mult > 0) ? Math.round(price * mult)
     : (Number.isFinite(stored) && stored > 0) ? Math.round(stored)
     : Math.round(price * 30);
-  return { price, cycle, expected, daily: Math.round(expected / cycle) };
+  return { price, cycle, expected, daily: Math.round(Math.max(0, expected - price) / cycle) };
 }
 // HH:MM:SS, and days folded into the hours rather than shown separately -- a
 // product opening in two days reads "48:00:00", which is still a countdown. A
@@ -3600,7 +3600,8 @@ function nextMidnightMs(now){
 function nextPayoutMs(inv, now){
   const first = inv && inv.payoutFirstAt ? new Date(inv.payoutFirstAt).getTime() : 0;
   if (!(first > 0)) return nextMidnightMs(now);
-  return first + Math.max(0, Number(inv.payoutsMade) || 0) * 86400000;
+  const per = Number(inv.periodMs) > 0 ? Number(inv.periodMs) : 86400000;
+  return first + Math.max(0, Number(inv.payoutsMade) || 0) * per;
 }
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
@@ -3614,9 +3615,9 @@ function vOwnedCardHtml(inv){
         ${ckRow('Price', ckMoney(st.amount))}
         ${ckRow('Daily profit', ckMoney(st.daily))}
         ${ckRow('Days', String(st.total))}
-        ${ckRow('Total profit', ckMoney(st.expected))}
+        ${ckRow(st.newRule ? 'Total return' : 'Total profit', ckMoney(st.expected))}
       </dl>
-      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}${invCategory(inv) === 'wage' && !st.matured ? '<i class="ck-oc-wmul"></i>' : ''}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? '<br>Free' : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
+      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}${invCategory(inv) === 'wage' && !st.matured ? '<i class="ck-oc-wmul"></i>' : ''}<em class="ck-oc-st${st.matured ? ' done' : ''}${invCategory(inv) === 'wage' ? ' ck-oc-wst' : ''}">${st.matured ? 'Completed' : 'Running'}${invCategory(inv) === 'wage' ? (st.newRule ? (st.matured ? '<br>Released' : '<br>Locked') : '<br>Free') : ''}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
     ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${nextPayoutMs(inv)}">${fmtCountdown(nextPayoutMs(inv) - ckNow(), true)}</b></div>`}
   </article>`;
@@ -3675,8 +3676,8 @@ function paintAssets(){
 <div class="ck-sub ck-income v-income">
   ${ckHeader('Income')}
   <div class="ck-tabs ck-inc-tabs" role="tablist">
-    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setIncomeTab('income')">Daily Income</button>
-    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setIncomeTab('wage')">Daily wage</button>
+    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setIncomeTab('income')">Hourly Income</button>
+    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setIncomeTab('wage')">Locking</button>
   </div>
   <div class="ck-inc-list" id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty ck-nodata">NO DATA</div>'}</div>
 </div>`;
@@ -3892,16 +3893,26 @@ function planStats(inv){
   // days left. Fall back through the product's own cycle and the platform
   // default before resorting to a constant.
   const prod = (STATE.products || []).find(p => p.key === inv.tierKey);
-  const total = Number(inv.payoutsTotal)
+  const newRule = inv.payoutModel === 'principal-last';
+  const per = Number(inv.periodMs) > 0 ? Number(inv.periodMs) : 86400000;
+  // A product bought under the hourly / Locking rule pays many (hourly) or one (Locking) payments, so its length in DAYS is its own cycle,
+  // and the days gone are worked out from the payments made.
+  const payments = Number(inv.payoutsTotal)
     || (prod && Number(prod.cycle))
     || Number((STATE.settings || {}).cycleDays)
     || 150;
-  const made = Math.min(Number(inv.payoutsMade) || 0, total);
+  const total = newRule ? (Number(inv.cycle) || Math.max(1, Math.round(payments * per / 86400000))) : payments;
+  const made = newRule
+    ? Math.min(Math.floor((Number(inv.payoutsMade) || 0) * per / 86400000), total)
+    : Math.min(Number(inv.payoutsMade) || 0, total);
   const expected = Number(inv.expectedReturn) || 0;
   const earned = Number(inv.paidOut) || 0;
-  const matured = inv.status === 'matured' || made >= total;
+  const matured = inv.status === 'matured' || (Number(inv.payoutsMade) || 0) >= payments;
+  const principal = newRule ? Math.max(0, Math.min(Number(inv.principal) || 0, expected)) : 0;
   return {
-    total, made, expected, earned, matured,
+    total, made, expected, earned, matured, newRule, locked: newRule && per > 3600000, profit: Math.max(0, expected - principal),
+    // the profit earned so far, without the purchase price coming back at the end
+    earnedProfit: newRule ? Math.min(earned, Math.max(0, expected - principal)) : earned,
     amount: Number(inv.amount) || 0,
     daily: Number(inv.dailyPayout) || 0,
     // What is still to come. Clamped at zero so a plan that over-paid by a
@@ -3932,7 +3943,7 @@ function myAssetRowHtml(inv){
     </div>
     <div class="mar-values">
       <div><span>Invested</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
-      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earnedProfit)}</b></div>
       <div><span>${st.matured ? 'Return' : 'Daily'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
     </div>
     <div class="mar-progress"><i style="width:${progress}%"></i></div>
@@ -4641,7 +4652,7 @@ window.closeHelpDialog = function(){
 // earnings screens.
 var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
 var STATEMENT_FRUIT_TYPES = new Set(['fruit','fruit_win','fruit_bet']);
-var STATEMENT_NOT_INCOME = new Set(['deposit','admin_credit','withdraw','invest','investment','investment_refund']);
+var STATEMENT_NOT_INCOME = new Set(['deposit','admin_credit','withdraw','invest','investment','investment_refund','investment_return']);
 function statementCategoryMatch(cat, t){
   if (cat === 'income' || cat === 'all') return !STATEMENT_NOT_INCOME.has(t.type);
   if (cat === 'deposit') return t.type === 'deposit' || t.type === 'admin_credit';
@@ -4653,7 +4664,8 @@ function statementCategoryMatch(cat, t){
 function statementDescription(t){
   if (t.type === 'deposit') return 'Deposit';
   if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Earnings';
+  if (t.type === 'cashback') return /hourly/i.test(String(t.description || '')) ? 'Hourly Earnings' : 'Daily Earnings';
+  if (t.type === 'investment_return') return 'Purchase Returned';
   if (t.type === 'commission') return 'Referral Commission';
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';

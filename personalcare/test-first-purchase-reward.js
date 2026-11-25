@@ -89,7 +89,7 @@ function setup(input=seed()){
     app:{post:(p,h)=>{ctxRoutes[p]=h}}
   });
   const ctxRoutes={}; c.ctxRoutes=ctxRoutes;
-  vm.runInContext('const _lockTails=new Map();\n'+['withLock','finiteMoney','creditReferralCommission','_payReferralCommissionNow','reconcilePurchaseIntents'].map(fn).join('\n')+'\n'+route('/invest/create'),c);
+  vm.runInContext('const _lockTails=new Map();\n'+['withLock','finiteMoney','planSchedule','creditReferralCommission','_payReferralCommissionNow','reconcilePurchaseIntents'].map(fn).join('\n')+'\n'+route('/invest/create'),c);
   return {c,db,buy:(uid,tierKey)=>{const res=response();return ctxRoutes['/invest/create']({uid,body:{tierKey}},res).then(()=>res)}};
 }
 function response(){return {code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}}}
@@ -106,28 +106,18 @@ async function main(){
     assert.deepEqual(commissions(db).map(t=>[t.userId,t.commissionLevel,t.description]).sort(),[['l1',0,'Level 1 reward'],['l2',1,'Level 2 reward'],['l3',2,'Level 3 reward']]);
     const inv=Object.values(db.rows.investments)[0];
     assert.equal(inv.isFirstInvestment,true);assert.equal(inv.commissionPending,false,'paid, so nothing left pending');
-    // OWNER: "remove first purchase cashback immediately": by default (switch not set) the first purchase waits 24 hours like any other and nothing is paid at the moment of purchase.
-    assert.ok(Math.abs(+new Date(inv.payoutFirstAt)-(Date.now()+86400000))<5000,'first purchase: NO cashback at once (default off), first one 24 hours later');
+    // No cashback at the moment of purchase: an hourly product pays its first share one hour later (the price comes back with the last one).
+    assert.ok(Math.abs(+new Date(inv.payoutFirstAt)-(Date.now()+3600000))<5000,'first purchase: NO cashback at once, first share one hour later');
+    assert.equal(inv.payoutModel,'principal-last');assert.equal(inv.principal,inv.amount,'the purchase price is kept to be returned');
     assert.equal(c.settled.length,0,'nothing is settled at the moment of purchase');
     assert.equal(+new Date(inv.nextPayoutAt),+new Date(inv.payoutFirstAt));
     const r2=await buy('buyer','p90');
     assert.equal(r2.body.status,'success');
     const inv2=db.rows.investments[r2.body.investmentId];
-    assert.ok(Math.abs(+new Date(inv2.payoutFirstAt)-(Date.now()+86400000))<5000,'a later purchase: first cashback 24 hours after the purchase');
+    assert.ok(Math.abs(+new Date(inv2.payoutFirstAt)-(Date.now()+3600000))<5000,'a later purchase: first share one hour after the purchase');
     assert.equal(c.settled.length,0,'a later purchase is not paid at once either');
     assert.equal(db.rows.users.l1.walletBalance,6000,'the second purchase pays the referrers nothing');
     assert.equal(commissions(db).length,3);
-  }
-  {
-    // The admin switch (off unless ticked): ON pays the first purchase's first cashback at the moment of purchase.
-    const {c,db,buy}=setup(); rates.firstPurchaseCashbackNow=true;
-    const r=await buy('buyer','p30'); assert.equal(r.body.status,'success');
-    const inv=db.rows.investments[r.body.investmentId];
-    assert.ok(Math.abs(+new Date(inv.payoutFirstAt)-Date.now())<5000,'switch on: first cashback due now');
-    assert.deepEqual(c.settled,[r.body.investmentId],'switch on: it is settled before the answer goes back');
-    assert.equal(inv.isFirstInvestment,true,'it is still the first purchase for the referral reward');
-    assert.equal(db.rows.users.l1.walletBalance,6000,'the referral reward does not depend on the switch');
-    delete rates.firstPurchaseCashbackNow;
   }
   {
     // two first purchases at the same instant: one reward only

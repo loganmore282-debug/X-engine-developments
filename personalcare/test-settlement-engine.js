@@ -78,7 +78,7 @@ function setup(rows){
   const c=vm.createContext({ db, Date:FakeDate, console:{log(){},warn(){},error(){}}, tzOffMs:()=>10800000, 
     _creditingPayouts:new Set(), nowStr:()=>({date:'d',time:'t'}), newStatementId:()=>'s-'+ ++serial,
     FieldValue:{ increment:n=>({op:'inc',n}), arrayUnion:(...items)=>({op:'union',items}), delete:()=>({op:'delete'}), serverTimestamp:()=>new FakeDate() } });
-  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','payoutFirstMs','payoutDueAtMs','payoutsDueCount','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
+  vm.runInContext('const _lockTails=new Map();\n'+['withLock','tsMillis','eatNextMidnight','payoutFirstMs','payoutDueAtMs','payoutsDueCount','invPeriodMs','settleInvestmentIfDue','_settleDueInvestmentNow'].map(fn).join('\n'),c);
   const settle=async id=>c.settleInvestmentIfDue(await db.collection('investments').doc(id).get());
   return {c,db,settle};
 }
@@ -196,6 +196,59 @@ async function main(){
     const h=setup({users:{m:member()},investments:{i1:plan({payoutsTotal:7,expectedReturn:100000})},transactions:{}});
     NOW=eat('2027-01-01T00:00:00');await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,100000);assert.equal(h.db.rows.investments.i1.paidOut,100000);
   }
-  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; every midnight; wage products)');
+  {
+    // THE NEW RULE (owner): 5,000 bought for 2 days, total 5,400 = 400 profit = 200 a day. The profit drops every hour into the wallet
+    // (48 payments) and the purchase price comes back with the very last one (the last hour of the cycle).
+    const bought=eat('2026-10-14T15:00:00');
+    const hourly=(o={})=>plan({amount:5000,expectedReturn:5400,payoutsTotal:48,periodMs:HOUR,payoutModel:'principal-last',principal:5000,earnings:400,cycle:2,payoutFirstAt:new FakeDate(bought+HOUR),createdAt:new FakeDate(bought),...o});
+    const h=setup({users:{m:member()},investments:{i1:hourly()},transactions:{}});
+    NOW=bought+HOUR-1;await h.settle('i1');assert.equal(h.db.rows.investments.i1.payoutsMade,0,'nothing before the first hour is over');
+    NOW=bought+HOUR;await Promise.all([h.settle('i1'),h.settle('i1')]);
+    assert.equal(h.db.rows.investments.i1.payoutsMade,1,'one payment after the first hour, once');
+    assert.equal(h.db.rows.users.m.walletBalance,8,'400 / 48 = about 8 a hour');
+    assert.equal(+new Date(h.db.rows.investments.i1.nextPayoutAt),bought+2*HOUR,'the next one is one hour later');
+    NOW=bought+DAY;await h.settle('i1');
+    assert.equal(h.db.rows.investments.i1.payoutsMade,24,'24 payments in the first day');
+    assert.equal(h.db.rows.users.m.walletBalance,200,'200 profit after the first day, no price back yet');
+    assert.equal(h.db.rows.users.m.totalEarned,200);
+    NOW=bought+2*DAY-HOUR;await h.settle('i1');
+    assert.equal(h.db.rows.investments.i1.payoutsMade,47,'one payment left');
+    assert.equal(h.db.rows.users.m.walletBalance,392,'all the profit but the last share is in, the price is not back yet');
+    assert.equal(h.db.rows.investments.i1.status,'active');
+    NOW=bought+2*DAY;await h.settle('i1');
+    assert.equal(h.db.rows.investments.i1.payoutsMade,48);assert.equal(h.db.rows.investments.i1.status,'matured');
+    assert.equal(h.db.rows.users.m.walletBalance,5400,'the wallet ends with exactly the total: 400 profit + 5,000 back');
+    assert.equal(h.db.rows.users.m.totalEarned,400,'only the 400 is a profit; the price coming back is not counted as earned');
+    assert.equal(h.db.rows.investments.i1.paidOut,5400);
+    const back=Object.values(h.db.rows.transactions).filter(t=>t.type==='investment_return');
+    assert.equal(back.length,1,'one ledger row for the price coming back');assert.equal(back[0].amount,5000);
+    assert.equal(cashRows(h.db).reduce((a,t)=>a+t.amount,0),400,'the cashback rows add up to the profit only');
+    assert.ok(cashRows(h.db).every(t=>/hourly reward$/.test(t.description)),'each is labelled an hourly reward');
+    NOW=bought+30*DAY;await h.settle('i1');assert.equal(h.db.rows.users.m.walletBalance,5400,'a matured product never pays again');
+    // a day's catch-up after the server was off pays every missed hour, once each
+    const g=setup({users:{m:member()},investments:{i2:hourly()},transactions:{}});
+    NOW=bought+10*HOUR+5;await Promise.all([g.settle('i2'),g.settle('i2')]);
+    assert.equal(g.db.rows.investments.i2.payoutsMade,10,'10 missed hours caught up');assert.equal(g.db.rows.users.m.walletBalance,Math.round(400*10/48));
+  }
+  {
+    // LOCKING: nothing is paid while the cycle runs; at the very end the profit and the price are released together, once.
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{k1:plan({amount:5000,expectedReturn:5400,payoutsTotal:1,periodMs:2*DAY,payoutModel:'principal-last',principal:5000,earnings:400,cycle:2,category:'wage',payoutFirstAt:new FakeDate(bought+2*DAY),createdAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought+2*DAY-1;await h.settle('k1');assert.equal(h.db.rows.users.m.walletBalance,0,'locked: nothing a millisecond before the end');
+    NOW=bought+DAY;await h.settle('k1');assert.equal(h.db.rows.users.m.walletBalance,0,'locked: nothing at the half way point');
+    NOW=bought+2*DAY;await Promise.all([h.settle('k1'),h.settle('k1')]);
+    assert.equal(h.db.rows.users.m.walletBalance,5400,'released together: price + profit, once');
+    assert.equal(h.db.rows.users.m.totalEarned,400);assert.equal(h.db.rows.investments.k1.status,'matured');
+    assert.equal(Object.values(h.db.rows.transactions).filter(t=>t.type==='investment_return').length,1);
+    await h.settle('k1');assert.equal(h.db.rows.users.m.walletBalance,5400);
+  }
+  {
+    // A product the admin gave for free earns its hourly profit but gets no purchase price back (the member paid nothing).
+    const bought=eat('2026-10-14T15:00:00');
+    const h=setup({users:{m:member()},investments:{f1:plan({amount:5000,expectedReturn:400,payoutsTotal:48,periodMs:HOUR,payoutModel:'principal-last',principal:0,earnings:400,cycle:2,granted:true,payoutFirstAt:new FakeDate(bought+HOUR),createdAt:new FakeDate(bought)})},transactions:{}});
+    NOW=bought+3*DAY;await h.settle('f1');
+    assert.equal(h.db.rows.users.m.walletBalance,400,'a free product pays only its profit');assert.equal(Object.values(h.db.rows.transactions).filter(t=>t.type==='investment_return').length,0);
+  }
+  console.log('PASS: settlement engine (exact totals, no double pay: concurrent, crash retry, catch-up, ban, removed; every midnight; hourly + price back; Locking; wage products)');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

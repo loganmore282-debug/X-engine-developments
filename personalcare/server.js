@@ -661,7 +661,6 @@ const DEFAULT_SETTINGS = {
   maxWithdrawalsPerMonth: 0, requireInvestToWithdraw: true,
   // Owner: "remove first purchase cashback immediately". OFF: the first purchase waits like every other one (first cashback at the next midnight schedule).
   // The admin switch stays, but nothing is paid at the moment of purchase unless the owner ticks it on again.
-  firstPurchaseCashbackNow: false,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -871,7 +870,7 @@ async function getProductsRaw() {
     const touchedKeys = new Set(saved.map(p => p.key));
     const merged = saved.filter(p => !p.deleted)
       .concat(DEFAULT_PRODUCTS.filter(p => !touchedKeys.has(p.key)));
-    // The category is never left to chance: a product saved as a task product is Daily wage, and so is any product that costs nothing.
+    // The category is never left to chance: a product saved as Locking is 'wage', and so is any old product that costs nothing (it cannot be bought).
     merged.forEach(p => { p.category = (p.category === 'wage' || Number(p.price) === 0) ? 'wage' : 'income'; });
     merged.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.price || 0) - (b.price || 0));
     _productsCache = merged;
@@ -1263,19 +1262,46 @@ function eatNextMidnight(ts) {
 function payoutFirstMs(createdMs, firstAtMs) {
   return Number(firstAtMs) > 0 ? Number(firstAtMs) : eatNextMidnight(createdMs);
 }
-function payoutDueAtMs(createdMs, k, firstAtMs) {
-  return payoutFirstMs(createdMs, firstAtMs) + (Math.max(1, k) - 1) * 86400000;
+// `periodMs` is the gap between two payments: 24 hours for every product bought before the hourly / Locking rules (the default),
+// one hour for an hourly product, and the whole cycle (one single payment) for a Locking product. See planSchedule().
+function payoutDueAtMs(createdMs, k, firstAtMs, periodMs) {
+  return payoutFirstMs(createdMs, firstAtMs) + (Math.max(1, k) - 1) * (Number(periodMs) > 0 ? Number(periodMs) : 86400000);
 }
-function payoutsDueCount(createdMs, now, total, firstAtMs) {
+function payoutsDueCount(createdMs, now, total, firstAtMs, periodMs) {
+  const per = Number(periodMs) > 0 ? Number(periodMs) : 86400000;
   const first = payoutFirstMs(createdMs, firstAtMs);
   if (now < first) return 0;
-  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
+  return Math.min(total, Math.floor((now - first) / per) + 1);
 }
 // The instants of the first `total` payments, in one pass (analytics asks for every contract).
-function payoutInstants(createdMs, total, firstAtMs) {
+function payoutInstants(createdMs, total, firstAtMs, periodMs) {
+  const per = Number(periodMs) > 0 ? Number(periodMs) : 86400000;
   const first = payoutFirstMs(createdMs, firstAtMs), out = [];
-  for (let i = 0; i < total; i++) out.push(first + i * 86400000);
+  for (let i = 0; i < total; i++) out.push(first + i * per);
   return out;
+}
+function invPeriodMs(inv) { return Number(inv && inv.periodMs) > 0 ? Number(inv.periodMs) : 86400000; }
+// ── The payout plan of a bought product (owner: "if one buys a product of 5k for 2 days then total will be 5400, so 200 daily, so the
+// last day he gets 200 and the last hour gets his purchase price back") ──
+// The product's total payout INCLUDES the purchase price: 5,000 bought for 2 days with a total of 5,400 earns 400 (200 a day).
+//   * Hourly products pay that profit in equal hourly shares straight into the wallet, 24 shares a day, and the purchase price comes back
+//     together with the very last share (the last hour of the cycle).
+//   * Locking products (category 'wage') pay nothing along the way: the profit and the purchase price are released together when the
+//     cycle ends.
+// Rows written before this rule have no `payoutModel` and keep the old schedule exactly (the whole total paid daily, no price back).
+function planSchedule(p, sett) {
+  const price = Number(p && p.price) || 0;
+  const cycle = Math.max(1, Math.round(Number(p && p.cycle) || Number(sett && sett.cycleDays) || 150));
+  const expectedReturn = productExpectedReturn(p, sett);
+  const earnings = Math.max(0, expectedReturn - price);
+  const locked = !!p && p.category === 'wage';
+  return {
+    price, cycle, expectedReturn, earnings, locked,
+    total: locked ? 1 : cycle * 24,
+    periodMs: locked ? cycle * 86400000 : 3600000,
+    dailyPayout: Math.round(earnings / cycle),
+    hourlyPayout: Math.round(earnings * 100 / (cycle * 24)) / 100,
+  };
 }
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
@@ -2906,12 +2932,13 @@ async function _settleDueInvestmentNow(doc) {
   if (!total || made >= total) return false;
   const createdMs = tsMillis(inv.createdAt) || Date.now();
   const firstAtMs = tsMillis(inv.payoutFirstAt) || 0;
-  const dueCount = payoutsDueCount(createdMs, Date.now(), total, firstAtMs) - made;
+  const periodMs = invPeriodMs(inv);
+  const dueCount = payoutsDueCount(createdMs, Date.now(), total, firstAtMs, periodMs) - made;
   if (dueCount <= 0) {
     // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds either side of 00:00, or a row
     // with no hint): put the hint at the real due time, or this product is re-read every 0.5 s until then.
     if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
-      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1, firstAtMs)) }).catch(() => {});
+      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1, firstAtMs, periodMs)) }).catch(() => {});
     }
     return false;
   }
@@ -2944,14 +2971,23 @@ async function _settleDueInvestmentNow(doc) {
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
       const fFirstAt = tsMillis(f.payoutFirstAt) || 0;
-      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal, fFirstAt) - fMade;
+      const fPeriod = invPeriodMs(f);
+      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal, fFirstAt, fPeriod) - fMade;
       if (fDue <= 0) return;
       const newMade = fMade + 1;
       const willComplete = newMade >= fTotal;
       const fExpected = Number(f.expectedReturn) || 0;
       const fPaidOut = Number(f.paidOut) || 0;
-      const target = Math.round(fExpected * newMade / fTotal);
+      // New rule: the profit is shared out over the payments and the purchase price comes back with the last one. An older row pays its
+      // whole total in shares, as before.
+      const newRule = f.payoutModel === 'principal-last';
+      const fPrincipal = newRule ? Math.max(0, Math.min(Number(f.principal) || 0, fExpected)) : 0;
+      const target = newRule
+        ? (willComplete ? fExpected : Math.round((fExpected - fPrincipal) * newMade / fTotal))
+        : Math.round(fExpected * newMade / fTotal);
       const amount = Math.max(0, target - fPaidOut);
+      const principalPart = newRule && willComplete ? Math.min(fPrincipal, amount) : 0;
+      const earnedPart = amount - principalPart;
       // (amount can be 0 for a tiny payout: the day still counts, so the cursor moves on below without a credit.)
       // Credit first with a deterministic per-investment payout token in the
       // same atomic user-document update. If the process stops after the
@@ -2968,7 +3004,7 @@ async function _settleDueInvestmentNow(doc) {
           const applied = await userRef.updateIf(
             { creditedPayoutKeys: { $ne: payoutKey }, status: { $ne: 'banned' } },
             {
-              walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount),
+              walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(earnedPart),
               creditedPayoutKeys: FieldValue.arrayUnion(payoutKey)
             }
           );
@@ -2981,10 +3017,20 @@ async function _settleDueInvestmentNow(doc) {
             }
           }
           const { date, time } = nowStr();
-          await db.collection('transactions').doc(`cashback:${payoutKey}`).createIfAbsent({
-            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
-            amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
-          });
+          if (earnedPart > 0 || !newRule) {
+            await db.collection('transactions').doc(`cashback:${payoutKey}`).createIfAbsent({
+              userId: f.userId, statementId: newStatementId(), type: 'cashback',
+              description: !newRule ? `${f.tierLabel} daily cashback` : (fPeriod === 3600000 ? `${f.tierLabel} hourly reward` : `${f.tierLabel} reward released`),
+              amount: newRule ? earnedPart : amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+            });
+          }
+          // The purchase price coming back is not a profit: its own ledger row, kept out of the earnings totals.
+          if (principalPart > 0) {
+            await db.collection('transactions').doc(`return:${payoutKey}`).createIfAbsent({
+              userId: f.userId, statementId: newStatementId(), type: 'investment_return', description: `${f.tierLabel} purchase price returned`,
+              amount: principalPart, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+            });
+          }
         }
         // Keep this inside bal:<userId> too: recountAllTotals() re-reads its
         // source ledger while holding that same lock, so it cannot snapshot
@@ -2994,7 +3040,7 @@ async function _settleDueInvestmentNow(doc) {
         await doc.ref.update({
           payoutsMade: newMade, paidOut: FieldValue.increment(amount),
           status: willComplete ? 'matured' : 'active',
-          nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1, fFirstAt)),
+          nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1, fFirstAt, fPeriod)),
         });
       });
       if (payoutBlocked) return;
@@ -3534,8 +3580,10 @@ function productOpenState(p, nowMs) {
 function publicProductView(p, sett) {
   const cycle = Number(p.cycle) || Number(sett && sett.cycleDays) || 150;
   const expectedReturn = productExpectedReturn(p, sett);
+  const plan = planSchedule(p, sett);
   const st = productOpenState(p, Date.now());
-  return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle),
+  // expectedReturn is the TOTAL the member gets back (price + profit); dailyPayout / hourlyPayout are the profit shares.
+  return { ...p, cycle, expectedReturn, dailyPayout: plan.dailyPayout, hourlyPayout: plan.hourlyPayout, earnings: plan.earnings, locked: plan.locked,
     isOpen: st.open, openMode: st.mode, opensAt: st.opensAt || null, closesAt: st.closesAt || null };
 }
 // ── WHY THESE READS CARRY AN ETag ──
@@ -4388,13 +4436,13 @@ app.post('/invest/create', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const tier = await getProductByKey(req.body.tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
-  // Task products ("Daily wage") are activated for a member by the admin, never bought: a purchase attempt is always answered "sold out".
-  if (tier.category === 'wage') return res.status(400).json({ status: 'error', code: 'SOLD_OUT', message: 'The product has been sold out' });
+  // A product with no price (an old task product) cannot be bought. Locking products ('wage') are bought like any other.
+  if (!(Number(tier.price) > 0)) return res.status(400).json({ status: 'error', code: 'SOLD_OUT', message: 'The product has been sold out' });
   if (tier.active === false || !productOpenState(tier, Date.now()).open)
     return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
   try {
     const sett = await getSettings();
-    let invId, liveTier, cycle, expectedReturn, dailyPayout, isFirstInvestment = false, cashbackNow = false;
+    let invId, liveTier, cycle, expectedReturn, dailyPayout, plan, isFirstInvestment = false, cashbackNow = false;
     // NOT db.runTransaction -- that helper just runs queued ops sequentially
     // with no rollback (M0 has no real multi-document transactions), so it
     // gave no real protection here anyway. Awaiting the debit directly lets
@@ -4408,9 +4456,9 @@ app.post('/invest/create', async (req, res) => {
       // closes must not slip a purchase through on a stale card.
       if (!liveTier || liveTier.active === false || !productOpenState(liveTier, Date.now()).open)
         throw new Error('This product is not open right now.');
-      cycle = Number(liveTier.cycle) || sett.cycleDays;
-      expectedReturn = productExpectedReturn(liveTier, sett);
-      dailyPayout = Math.round(expectedReturn / cycle);
+      if (!(Number(liveTier.price) > 0)) throw new Error('This product is not open right now.');
+      plan = planSchedule(liveTier, sett);
+      cycle = plan.cycle; expectedReturn = plan.expectedReturn; dailyPayout = plan.dailyPayout;
       const uRef = db.collection('users').doc(userId);
       const fresh = await uRef.get();
       if (!fresh.exists) throw new Error('User not found');
@@ -4463,15 +4511,17 @@ app.post('/invest/create', async (req, res) => {
       });
       if (!debited) { await intentRef.delete().catch(() => {}); throw new Error('Could not complete the purchase. Please try again.'); }
       const { date, time } = nowStr();
-      // First cashback: at once on the member's first purchase, otherwise 24 hours from now; then every 24 hours.
+      // The first reward is one period after the purchase (one hour for an hourly product; the whole cycle for a Locking product, which pays
+      // once). The old "first purchase pays at once" rule does not apply: the last payment must land exactly when the cycle ends.
       const boughtAtMs = Date.now();
-      cashbackNow = isFirstInvestment && sett.firstPurchaseCashbackNow === true;
-      const payoutFirstAt = new Date(cashbackNow ? boughtAtMs : boughtAtMs + 86400000);
+      cashbackNow = false;   // (the old "first purchase pays at once" switch is gone: the schedule is the same for every purchase)
+      const payoutFirstAt = new Date(boughtAtMs + plan.periodMs);
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', payoutFirstAt, nextPayoutAt: payoutFirstAt, dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: 'income',
+          status: 'active', payoutFirstAt, nextPayoutAt: payoutFirstAt, dailyPayout, payoutsTotal: plan.total, payoutsMade: 0, paidOut: 0,
+          payoutModel: 'principal-last', periodMs: plan.periodMs, principal: liveTier.price, earnings: plan.earnings,
+          isFirstInvestment, commissionBasis: 'investment', commissionPaidLevels: [], commissionPending: isFirstInvestment, category: plan.locked ? 'wage' : 'income',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         // A fixed id (purchase:<investment id>), so the sweep below can write the same row if the server died after the investment but before this line.
@@ -4533,8 +4583,8 @@ app.get('/investments', async (req, res) => {
     const investments = snap.docs.map(d => {
       const data = d.data();
       const live = byKey.get(data.tierKey);
-      // Which Income tab it lives in is a fact about THIS plan, fixed when it was bought or activated: a bought product is Daily income, a
-      // task product the admin activated is Daily wage (a plan with no stamp is read from its own price: a task product costs nothing).
+
+
       return { id: d.id, ...data, category: data.category === 'wage' || data.category === 'income' ? data.category : ((Number(data.amount) || 0) === 0 ? 'wage' : 'income'), tierLabel: (live && live.name) || data.tierLabel };
     });
     // serverNow lets the app run its settlement countdown on the server's clock, not on a phone clock that may be minutes out.
@@ -6791,7 +6841,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'firstPurchaseCashbackNow', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7139,12 +7189,13 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   if (p?.name != null && typeof p.name !== 'string') return refuse('Name', 'must be text');
   const name = String(p?.name || '').trim().slice(0, 100);
   if (!name) return refuse('Name', 'cannot be blank');
-  // A task product ("Daily wage") costs nothing: the admin activates it for a member. It is never bought, so its price is 0 and it never needs a multiplier.
+  // 'wage' is the stored name of the Locking category: a product the member buys whose money (price + profit) is released only when the
+  // cycle ends. The other category ('income') pays its profit every hour.
   const category = p?.category === 'wage' ? 'wage' : 'income';
   if (!plain(p?.price)) return refuse('Price', 'must be a number');
   const priceRaw = Number(p?.price);
   const price = Math.round(priceRaw);
-  const minPrice = category === 'wage' ? 0 : 1;
+  const minPrice = 1;
   if (!Number.isFinite(price) || price < minPrice || price > MAX_MONEY_AMOUNT)
     return refuse('Price', `must be a number between ${minPrice} and ${MAX_MONEY_AMOUNT}`);
   if (priceRaw !== price) return refuse('Price', 'must be a whole number of shillings');
@@ -7231,13 +7282,14 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   // Without these the purchase would quietly fall back to the built-in
   // x30 over 150 days and promise the member a payout nobody chose.
   if (cycle == null) return refuse('Cycle (days)', 'is required');
-  if (category === 'wage') multiplier = null;   // price 0 x anything is 0: a task product always carries its own total payout
-  if (category === 'wage' && expectedReturn == null) return refuse('Total payout', 'is required for a task product');
   if (multiplier == null && expectedReturn == null) return refuse('Multiplier (×)', 'or the total payout is required');
   // The payout the member is promised must be a real amount: at least 1 shilling and inside the same ceiling as a typed total.
   const promised = multiplier != null ? Math.round(price * multiplier) : expectedReturn;
   if (!(promised >= 1) || promised > MAX_MONEY_AMOUNT)
     return refuse(multiplier != null ? 'Multiplier (×)' : 'Total payout', `must give a total payout between 1 and ${MAX_MONEY_AMOUNT} (price x multiplier is ${Number.isFinite(promised) ? promised : 'not a number'})`);
+  // The total INCLUDES the purchase price coming back, so it must be more than the price or there is no profit to pay.
+  if (!(promised > price))
+    return refuse(multiplier != null ? 'Multiplier (×)' : 'Total payout', `must be more than the price (the total includes the money back: a price of ${price} with a total of ${Number.isFinite(promised) ? promised : 'not a number'} earns nothing)`);
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = (p?.order != null && p.order !== '') ? Number(p.order) : fallbackOrder;
   // How many of this asset one member may own (the "0/3" badge on the card). 0 or blank = no limit.
@@ -7253,7 +7305,6 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  if (category === 'wage') vip = 0;               // a task product gives no VIP level
   return { key, name, category, price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
@@ -7695,23 +7746,25 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       if (!u.exists) throw new Error('User not found');
       if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving a product.');
       const price = Number(tier.price) || 0;
-      const isTask = tier.category === 'wage';
-      if (!(price > 0) && !isTask) throw new Error('This product has no price set');
-      const cycle = Number(tier.cycle) || sett.cycleDays;
-      const expectedReturn = productExpectedReturn(tier, sett);
+      if (tier.category === 'wage') throw new Error('Locking products are bought by members, they cannot be activated from here.');
+      if (!(price > 0)) throw new Error('This product has no price set');
+      // A free product earns its profit hourly like a bought one, but the member paid nothing, so no purchase price comes back.
+      const plan = planSchedule(tier, sett);
+      const cycle = plan.cycle;
+      const expectedReturn = plan.earnings;
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', payoutFirstAt: new Date(Date.now() + 86400000), nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', payoutFirstAt: new Date(Date.now() + plan.periodMs), nextPayoutAt: new Date(Date.now() + plan.periodMs), dailyPayout: plan.dailyPayout, payoutsTotal: plan.total, payoutsMade: 0, paidOut: 0,
+        payoutModel: 'principal-last', periodMs: plan.periodMs, principal: 0, earnings: plan.earnings,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
-        category: isTask ? 'wage' : 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
+        category: 'income', granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       if (!created) { alreadyGiven = true; return; }
       // The plan exists first: if anything below fails, the worst case is a
       // total that is short by this plan, which "Recalculate totals" repairs.
-      // A free task product must not count as a first purchase (that would unlock withdrawals that need a bought product).
-      if (!isTask) await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
+      await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
       await db.collection('transactions').doc('grant-asset:' + invId).createIfAbsent({
         userId, statementId: newStatementId(), type: 'investment', description: `${tier.name} activated`, amount: 0,
         status: 'success', date, time, investmentId: invId, createdAt: FieldValue.serverTimestamp()
@@ -7736,6 +7789,8 @@ app.post('/admin/user/grant-asset', async (req, res) => {
 // refuses and asks for a human to diagnose by hand, unchanged.
 // A pending deposit records an intent, not money credited to the wallet.
 // Pending withdrawals, in contrast, have already debited their gross amount.
+// ('investment_return' -- a purchase price coming back -- is real wallet money, so it counts here like every other row; it is deliberately
+// NOT in EARNING_TX_TYPES, because it is not a profit.)
 function walletLedgerAmount(t) {
   if (t.type === 'deposit' && t.status !== 'success') return 0;
   return finiteMoney(t.amount);
@@ -8763,9 +8818,11 @@ function analyticsContractDay(inv, start, end, now) {
   if (!created0 || !Number.isInteger(total) || total <= 0 ||
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
-  const target = n => Math.round(expected * n / total);
-  // t[k-1] is the instant of the k-th payment (every local midnight).
-  const t = payoutInstants(created0, total, tsMillis(inv.payoutFirstAt) || 0);
+  const newRule = inv.payoutModel === 'principal-last';
+  const principal = newRule ? Math.max(0, Math.min(Number(inv.principal) || 0, expected)) : 0;
+  const target = n => newRule ? (n >= total ? expected : Math.round((expected - principal) * n / total)) : Math.round(expected * n / total);
+  // t[k-1] is the instant of the k-th payment (every local midnight; every hour for an hourly product; one payment for a Locking one).
+  const t = payoutInstants(created0, total, tsMillis(inv.payoutFirstAt) || 0, invPeriodMs(inv));
   let first = 1, last = 0, due = 0;
   while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
   last = first - 1;
@@ -9011,7 +9068,7 @@ app.post('/admin/analytics', async (req, res) => {
         const amount = finiteMoney(inv.amount), expected = finiteMoney(inv.expectedReturn), remaining = Math.max(0, expected - finiteMoney(inv.paidOut));
         plans.active.count++; plans.active.invested += amount; plans.active.expected += expected; plans.active.remaining += remaining;
         if (!created || !Number.isInteger(total) || total <= 0) return;
-        const at = payoutDueAtMs(created, total, inv.payoutFirstAt);
+        const at = payoutDueAtMs(created, total, inv.payoutFirstAt, invPeriodMs(inv));
         if (at <= nowMs) plans.active.dueNow++;
         const day = eatDayKey(new Date(Math.max(at, nowMs)));
         const g = byDay.get(day) || { day, count: 0, invested: 0, cashback: 0 };
@@ -9928,7 +9985,7 @@ async function backfillNextPayoutAt() {
   for (const d of snap.docs) {
     const x = d.data(), createdMs = tsMillis(x.createdAt);
     if (!createdMs) continue;
-    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, (Number(x.payoutsMade) || 0) + 1, tsMillis(x.payoutFirstAt) || 0)) }); n++;
+    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, (Number(x.payoutsMade) || 0) + 1, tsMillis(x.payoutFirstAt) || 0, invPeriodMs(x))) }); n++;
   }
   return n;
 }

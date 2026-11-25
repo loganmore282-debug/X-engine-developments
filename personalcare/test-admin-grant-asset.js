@@ -14,6 +14,7 @@ const cut = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + 1); ass
 
 const routeSrc = cut("app.post('/admin/user/grant-asset'", "app.post('/admin/user/repair-wallet'");
 const lockSrc = cut('function withLock(key, fn) {', 'const _userBeingDeleted');
+const planSrc = cut('function planSchedule(', '\n}\n') + '\n}\n';
 
 function setup({ users, products }) {
   const store = { users: new Map(Object.entries(users)), investments: new Map(), transactions: new Map() };
@@ -29,7 +30,7 @@ function setup({ users, products }) {
   let handler; const app = { post: (p, h) => { if (p === '/admin/user/grant-asset') handler = h; } };
   const audit = [];
   const factory = new Function('app', 'db', 'FieldValue', 'verifyOwner', 'getProductByKey', 'getSettings', 'productExpectedReturn', 'nowStr', 'newStatementId', 'logAdminAction', 'console', 'eatNextMidnight', 'payoutDueAtMs',
-    'const _lockTails = new Map(); const _vipCache = new Map();\n' + lockSrc + '\n' + routeSrc + '\nreturn withLock;');
+    'const _lockTails = new Map(); const _vipCache = new Map();\n' + lockSrc + '\n' + planSrc + '\n' + routeSrc + '\nreturn withLock;');
   factory(app, db, FieldValue, req => req.__owner === true, async k => products[k] || null, async () => ({ cycleDays: 8 }),
     (p, s) => Math.round(p.price * (p.multiplier || 3)), () => ({ date: '2026-10-04', time: '10:00' }), () => 'B2TEST', (req, a, m) => audit.push([a, m]), { warn() {} }, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000);
   const call = async (body, owner = true) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
@@ -38,7 +39,7 @@ function setup({ users, products }) {
 }
 
 (async () => {
-  const products = { volt: { key: 'volt', name: 'Test Asset', price: 30000, cycle: 8, multiplier: 3 }, gone: { key: 'gone', name: 'Old', price: 1000, deleted: true }, free: { key: 'free', name: 'Free', price: 0 } };
+  const products = { volt: { key: 'volt', name: 'Test Asset', price: 30000, cycle: 8, multiplier: 3 }, gone: { key: 'gone', name: 'Old', price: 1000, deleted: true }, free: { key: 'free', name: 'Free', price: 0 }, lock: { key: 'lock', name: 'Locker', price: 5000, cycle: 2, multiplier: 1.08, category: 'wage' } };
   const mk = () => setup({ users: { u1: { phone: '0700', walletBalance: 5000, totalInvested: 0, status: 'active' }, bad: { status: 'banned', walletBalance: 0 } }, products });
 
   // owner-only
@@ -50,7 +51,8 @@ function setup({ users, products }) {
   eq(r.code, 200); ok(r.body.status === 'success' && !r.body.alreadyGiven, 'given');
   eq(t.store.investments.size, 1, 'one plan'); const inv = [...t.store.investments.values()][0];
   eq([inv.userId, inv.tierKey, inv.amount, inv.status, inv.expectedReturn, inv.payoutsTotal, inv.payoutsMade, inv.paidOut, inv.granted, inv.grantedBy],
-     ['u1', 'volt', 30000, 'active', 90000, 8, 0, 0, true, 'boss'], 'an ordinary active plan, flagged as granted');
+     ['u1', 'volt', 30000, 'active', 60000, 192, 0, 0, true, 'boss'], 'an hourly plan (8 days = 192 hourly payments), flagged as granted, paying only the 60,000 profit: a gift never returns the price');
+  eq([inv.payoutModel, inv.principal, inv.periodMs, inv.earnings], ['principal-last', 0, 3600000, 60000], 'new rule, no purchase price to give back');
   eq([inv.isFirstInvestment, inv.commissionPending, inv.commissionPaidLevels], [false, false, []], 'no referral commission can come from a gift');
   const u = t.store.users.get('u1');
   eq(u.walletBalance, 5000, 'wallet untouched: nothing is debited'); eq(u.totalInvested, 30000, 'counts as invested, matching Recalculate totals');
@@ -73,7 +75,7 @@ function setup({ users, products }) {
   t = mk();
   for (const [body, why] of [[{ userId: 'u1', tierKey: 'volt', requestId: 'short' }, 'bad request id'], [{ tierKey: 'volt', requestId: 'req-12345678' }, 'no user'],
     [{ userId: 'u1', tierKey: 'nope', requestId: 'req-12345678' }, 'unknown asset'], [{ userId: 'u1', tierKey: 'gone', requestId: 'req-12345678' }, 'deleted asset'],
-    [{ userId: 'u1', tierKey: 'free', requestId: 'req-12345678' }, 'no price'], [{ userId: 'ghost', tierKey: 'volt', requestId: 'req-12345678' }, 'unknown user'],
+    [{ userId: 'u1', tierKey: 'free', requestId: 'req-12345678' }, 'no price'], [{ userId: 'u1', tierKey: 'lock', requestId: 'req-12345678' }, 'a Locking product is bought, never activated'], [{ userId: 'ghost', tierKey: 'volt', requestId: 'req-12345678' }, 'unknown user'],
     [{ userId: 'bad', tierKey: 'volt', requestId: 'req-12345678' }, 'banned user']]) {
     r = await t.call(body); ok(r.code === 400 && r.body.status === 'error', 'refused: ' + why + ' -> ' + r.code);
   }
