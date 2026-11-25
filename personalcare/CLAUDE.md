@@ -113,3 +113,10 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 
 ## Putting the domain on (owner, Nov 2026)
 - ONE command that asks for the domain: `cd /srv/personalcare-src && git pull --ff-only && bash personalcare/deploy/setup-domain.sh` (`deploy/setup-domain.sh`: asks "Type your domain" and the app name, default `ug`, so the member app is `ug.<domain>`; remembers the domain in `/srv/personalcare-secrets/last-domain`; runs `quick-update.sh` then `set-domain.sh <domain> <name>`; if the DNS A records are missing it prints them and stops, changing nothing; at the end optionally prints the PesaJet and GitHub webhook details). Test: `test-setup-domain.js`.
+
+## TavuPay (third automatic gateway, ported from Mint)
+- Recharges and payouts through one endpoint `POST {TAVUPAY_BASE}/payments` (`type` collection / disbursement). Env vars on the VPS (never in git): `TAVUPAY_API_KEY`, `TAVUPAY_API_SECRET` (set with `deploy/set-secret.sh NAME`), optional `TAVUPAY_BASE_URL`, `TAVUPAY_CALLBACK_URL`. The server's public IPv4 must be whitelisted in the TavuPay dashboard (calls are forced to IPv4).
+- Webhook `/tavupay/webhook` (secret address `/h-<token>/tavupay`, shown by `deploy/show-links.sh tavupay`): answered 202 first; `X-TAVUPAY-Signature` = HMAC-SHA256 hex of the raw body with the API secret; an unsigned or wrong call is only a hint, the payment is always re-read before anything is credited.
+- Admin Settings > Payments: recharge gateway "TavuPay"; with withdrawals set to "Follow", payouts still go through MarzPay; pick "Always automatic (TavuPay sends payouts)" to send them through TavuPay.
+- Test: `test-tavupay.js`. Admin cache `personalcare-admin-shell-v157`.
+

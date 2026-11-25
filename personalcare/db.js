@@ -230,6 +230,8 @@ async function ensureIndexes() {
       partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
     ['withdrawals', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
       partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
+    // TavuPay's reference, looked up on every webhook from it.
+    ['pendingDeposits', { tavupayRef: 1 }, { name: 'tavupayRef_idx', partialFilterExpression: { tavupayRef: { $type: 'string' } } }],
   ];
   // Built in small parallel batches, not strictly one at a time -- was
   // sequential because a shared M0 cluster had very little real

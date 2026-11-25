@@ -208,7 +208,7 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-cont
 // Scoped to the one webhook path rather than set on the shared parser: this
 // holds a copy of every body it sees, and there is no reason to do that for
 // every request in the app.
-const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/deploy/webhook']);
+const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/tavupay/webhook', '/deploy/webhook']);
 const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };
 const rawJsonParser = express.json({ limit: '64kb', verify: keepRawBody });
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
@@ -499,7 +499,7 @@ function currentRegion() { return DEFAULT_REGION; }
 function currentRegionKey() { return DEFAULT_REGION_KEY; }
 app.use(async (req, res, next) => {
   // A payment callback is answered at once: it must never wait behind a settings read (a slow database would push its answer past the gateway's timeout).
-  if (req.path === '/deposit/callback' || req.path === '/withdraw/callback' || req.path === '/pesajet/webhook') return next();
+  if (req.path === '/deposit/callback' || req.path === '/withdraw/callback' || req.path === '/pesajet/webhook' || req.path === '/tavupay/webhook') return next();
   await getSettings();
   next();
 });
@@ -534,7 +534,7 @@ app.use((req, res, next) => {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/turntable'];
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook', '/tavupay/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
 // spelling it out, so renaming the app is one field and not a code change.
@@ -791,7 +791,7 @@ async function getSettings() {
 // the historical default -- rather than silently landing on 'manual',
 // which would divert real money to admin-managed numbers nobody expects.
 function normalizeProviderValue(v) {
-  if (v === 'pesajet' || v === 'manual') return v;
+  if (v === 'pesajet' || v === 'tavupay' || v === 'manual') return v;
   return 'marzpay';
 }
 // The single place that decides which real payment path a DEPOSIT uses.
@@ -807,7 +807,7 @@ function depositProvider(sett) {
 // historical default, same as every other unrecognized value.
 function depositAutomaticProvider(sett) {
   const p = depositProvider(sett);
-  return (p === 'pesajet') ? p : 'marzpay';
+  return (p === 'pesajet' || p === 'tavupay') ? p : 'marzpay';
 }
 // The single place that decides which real payment path a WITHDRAWAL
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
@@ -827,6 +827,7 @@ function marzMarket(region) {
 const GATEWAY_DIAL_CODES = Object.freeze({
   marzpay: Object.keys(MARZPAY_MARKETS),
   pesajet: ['256'],
+  tavupay: ['256'],
 });
 function gatewayServesDial(gateway, dial) {
   const allowed = GATEWAY_DIAL_CODES[gateway];
@@ -850,7 +851,9 @@ function payAAvailable(sett, region) {
 }
 function withdrawProvider(sett, region) {
   const w = (sett && sett.withdrawMethod) || 'follow';
-  const chosen = w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w);
+  let chosen = w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w);
+  // "Follow the recharge gateway" with TavuPay on the recharge side still pays out through MarzPay: TavuPay payouts are used only when the owner pins them (withdrawMethod 'tavupay').
+  if (chosen === 'tavupay' && w === 'follow') chosen = 'marzpay';
   // A gateway that cannot reach this country's numbers must never be handed a
   // payout. Falling back to manual leaves the money with a human, which is the
   // only correct answer until a gateway for that country exists -- the
@@ -4988,6 +4991,40 @@ app.post('/deposit/marzpay', async (req, res) => {
       return;
     }
 
+    if (provider === 'tavupay') {
+      // TavuPay branch -- same claim-as-pending shape as PesaJet. The deposit's own id is the idempotency key, so a genuine retry cannot raise a
+      // second prompt; our `ref` rides in the description so the payment can be recognised on the gateway's side. Nothing is credited here:
+      // the signed webhook, the watcher, the member's poll or the reconciler settle it.
+      let tv;
+      try {
+        tv = await tavupayCollect({
+          amount: amt, phone, description: 'Deposit ' + ref, idempotencyKey: depRef.id,
+          callback: tavupayHookUrl() || undefined,
+        });
+      } catch (netErr) {
+        console.error('TavuPay collect network error (dep ' + depRef.id + '):', netErr.message);
+        return;
+      }
+      if (!tv.ok) {
+        console.error('TavuPay collect rejected:', tv.httpStatus, JSON.stringify(tv.data).slice(0, 300));
+        // A gateway that is merely BUSY has not refused this payment: leave the row pending rather than tell a member it failed.
+        if (!tv.providerDown) await markDepositFailed(depRef, userId, tavupayUserMsg(tv, 'Could not start the payment'));
+        return;
+      }
+      const tavupayRef = String((tv.data && (tv.data.reference || (tv.data.data && tv.data.data.reference))) || '').trim() || null;
+      await withLock('dep:' + depRef.id, async () => {
+        const fresh = await depRef.get();
+        if (fresh.exists && fresh.data().status === 'initiating') {
+          await depRef.update({ status: 'pending', tavupayRef, tavupayAcceptedAtMs: Date.now() });
+        } else {
+          await depRef.update({ tavupayRef, tavupayAcceptedAtMs: Date.now() }).catch(() => {});
+        }
+      });
+      if (tavupayRef) watchTavupayDeposit(depRef.id);
+      else console.error('TavuPay accepted dep ' + depRef.id + ' but sent no reference: only the webhook can settle it');
+      return;
+    }
+
     let mpData;
     try {
       mpData = await marzCollect({
@@ -5242,6 +5279,13 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
       dep = depSnap.data();
     }
+    // The same hold for a TavuPay recharge that the server's own watcher is on.
+    if (holdMs > 0 && dep.provider === 'tavupay' && (dep.status === 'pending' || dep.status === 'initiating') && tavupayWatcherFresh(depSnap.id)) {
+      await waitDepositSettled(depSnap.id, holdMs);
+      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
+      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+      dep = depSnap.data();
+    }
     if (dep.status === 'matched') {
       // Best-effort self-heal: if a prior credit attempt got the status to
       // 'matched' but failed to actually pay the wallet (needsManualCredit),
@@ -5260,6 +5304,22 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     // screen. Its webhook URL is dashboard-configured rather than sent per
     // request (see the module note), so this poll is doing more of the work
     // here than it does for the other two gateways -- not less.
+    if (dep.provider === 'tavupay') {
+      if (!dep.tavupayRef) return res.json({ status: 'success', state: 'pending' });
+      if (tavupayWatcherFresh(depSnap.id)) return res.json({ status: 'success', state: 'pending' });
+      const t = await tavupayGetTx(dep.tavupayRef, { attempts: 1 });
+      if (t.providerDown || t.unavailable) return res.json({ status: 'success', state: 'pending' });
+      if (t.status === 'success' || t.status === 'failed') {
+        const out = await tavupayApply(depSnap, t, "member's poll");
+        if (out === 'success') return res.json({ status: 'success', state: 'matched' });
+        if (out === 'failed') {
+          const again = await db.collection('pendingDeposits').doc(depSnap.id).get();
+          if (again.exists && again.data().status === 'matched') return res.json({ status: 'success', state: 'matched' });
+          return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
+        }
+      }
+      return res.json({ status: 'success', state: 'pending' });
+    }
     if (dep.provider === 'pesajet') {
       if (!dep.pesajetTxId) return res.json({ status: 'success', state: 'pending' });
       // The server's own watcher is already asking PesaJet every second: this poll only reports what the database says (already read above).
@@ -5853,6 +5913,54 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
+    if (withdrawProvider(settNow) === 'tavupay') {
+      // TavuPay payout -- the PesaJet branch above with TavuPay's words. The withdrawal id is written first as our reference AND sent as the
+      // idempotency key; a reply that never arrived is ambiguous and the row stays on 'sending'; acceptance lands on 'processing' and the
+      // signed transfer.success / transfer.failed webhook (or the reconciler's re-read) finishes it. See tavupayApplyPayout.
+      const sendingMarker = withdrawalId;
+      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, tavupayRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+      const tv = await tavupayDisburse({ amount: wit.net, phone: wit.phone, description: 'Withdrawal', idempotencyKey: withdrawalId });
+      // 429 means TavuPay did NOT take the payout (a clean refusal, handled below); any other busy answer or a lost reply is ambiguous.
+      if (tv.providerDown && tv.httpStatus !== 429) {
+        console.error('TavuPay disbursement unreachable (ambiguous, NOT reverting to pending):', tv.httpStatus, JSON.stringify(tv.data).slice(0, 200));
+        return { code: 500, body: { status: 'error', message: 'Lost contact with TavuPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly. Check the TavuPay dashboard before rejecting it.', sendingReference: sendingMarker } };
+      }
+      if (!tv.ok) {
+        // A clean refusal: TavuPay answered and said no, so nothing was sent and the row goes back to Pending.
+        console.error('TavuPay disbursement refused:', tv.httpStatus, JSON.stringify(tv.data).slice(0, 300));
+        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, tavupayRef: null, tavupayTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        return { code: 400, body: { status: 'error', message: tavupayPayoutMsg(tv) } };
+      }
+      const tvData = (tv.data && tv.data.data && typeof tv.data.data === 'object') ? tv.data.data : (tv.data || {});
+      const tavupayTxId = String(tvData.reference || tv.data.reference || '').trim() || null;
+      if (!tavupayTxId) {
+        // Accepted but no reference to follow. Nothing here can ever look it up, so it stays on 'sending'; the signed webhook carries our
+        // idempotency key and settles it, otherwise a person checks the TavuPay dashboard.
+        console.error(`TavuPay accepted withdrawal ${withdrawalId} but returned no reference; left on 'sending' for its webhook`);
+        return { code: 500, body: { status: 'error', message: 'TavuPay accepted the payout but did not return its reference. It stays on "Sending" and is finished by TavuPay\'s confirmation; do not reject it before checking the TavuPay dashboard.' } };
+      }
+      await withLock('bal:' + wit.userId, async () => {
+        await witRef.update({ tavupayRef: sendingMarker, tavupayTxId });
+        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
+        if (!claimed) return;
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via TavuPay — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return {
+        code: 200,
+        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
+      };
+    }
+
     if (withdrawProvider(settNow) === 'pesajet') {
       // PesaJet payout. The three rules that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
@@ -6086,6 +6194,25 @@ app.post('/admin/withdraw/verify', async (req, res) => {
         status: 'success', ourStatus: w.status, marzStatus: 'manual',
         message: `This payout was sent by hand, not through MarzPay, so there is nothing to verify here${w.processedBy ? ' (recorded by ' + w.processedBy + ')' : ''}. Check the mobile-money record on the admin phone that sent it. Do NOT reject it unless you have confirmed there that no money went out.`,
       });
+    }
+    // A TavuPay-routed payout: same reasoning as the PesaJet one below. Verify must never say "nothing was sent" about a payout that may have gone.
+    if (w.tavupayRef) {
+      if (!w.tavupayTxId) {
+        return res.json({
+          status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
+          message: `A send attempt WAS made via TavuPay (reference: ${w.tavupayRef}) but we never recorded TavuPay's own reference to check against -- this does NOT mean nothing was sent. Check the TavuPay dashboard for that reference before rejecting; rejecting a payout that already went out will refund the member on top of it. A signed confirmation from TavuPay will also settle it by itself.`,
+        });
+      }
+      const t = await tavupayGetTx(w.tavupayTxId);
+      if (t.providerDown || t.unavailable) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via TavuPay (reference ${w.tavupayTxId}) but TavuPay would not tell us its status just now${t.unavailable ? ' (it does not answer status questions for this payment)' : ''}. Check the TavuPay dashboard. This does NOT mean nothing was sent; TavuPay's own confirmation will settle it.` });
+      }
+      let tvMessage;
+      if (t.status === 'success') tvMessage = `TavuPay confirms this payout was SENT (status: ${t.rawStatus}).`;
+      else if (t.status === 'failed') tvMessage = `TavuPay says this payout FAILED (status: ${t.rawStatus}).`;
+      else if (t.status === 'processing') tvMessage = `TavuPay still has this payout in flight (status: ${t.rawStatus}). Not finished, not failed.`;
+      else tvMessage = `TavuPay reports status: ${t.rawStatus || 'unknown'}.`;
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.rawStatus || 'unknown', message: tvMessage });
     }
     // A PesaJet-routed payout likewise has neither marzReference nor
     // marzTxUuid, so without this branch Verify would report "no gateway
@@ -6376,6 +6503,335 @@ async function pesajetWebhookOpen(body) {
   const w = await db.collection('withdrawals').doc(reference).get();
   return w.exists && ['processing', 'sending'].includes(w.data().status);
 }
+// ═══════════════════════════════════════════
+// TAVUPAY (recharges, and payouts when the owner picks them)
+// ═══════════════════════════════════════════
+// Contract: https://docs.tavupay.lat/developers (read from the owner's saved copy, October 2026). This environment cannot reach that host,
+// so everything below follows the document and nothing has been run against the live gateway. The places where the document disagrees with
+// itself are handled defensively and listed here so they are not forgotten:
+//   * One endpoint for both directions: POST /v1/payments {type:'collection', phone, amount, idempotencyKey, description, callback}; the reply
+//     is {ok, message, reference}. Acceptance is NOT settlement: the row stays pending until a confirmation arrives.
+//   * Auth is two headers, X-API-Key and X-API-Secret (never a Bearer token). The caller's IPv4 must be on the TavuPay IP whitelist, so every
+//     call is forced onto IPv4 (a VPS that also has IPv6 would otherwise call from an address nobody whitelisted).
+//   * Status is read with GET /v1/payments?reference=<reference>. The docs mark that endpoint "not available in the current API" in one place
+//     and tell merchants to use it in another, so a refusal of it (404/405/501, or a 401/403) is treated as "cannot re-check", never as a
+//     verdict on the payment.
+//   * The webhook is signed: X-TAVUPAY-Signature = HMAC-SHA256 (hex) of the RAW body with the API secret. Elsewhere the docs say no signing secret
+//     is needed. A valid signature is proof the call came from TavuPay (only they and we know the secret) and settles the payment by itself; an
+//     absent or wrong signature makes the call a HINT only: we then re-read the payment and credit only what that read says.
+//   * Nothing is ever credited from an amount the gateway reports: the wallet gets OUR stored amount, and only if the gateway's figure agrees
+//     with it (equal, or equal once its fee is taken off). A disagreement parks the row in Needs Review for a person.
+const TAVUPAY_BASE = (process.env.TAVUPAY_BASE_URL || 'https://api.tavupay.lat/v1').replace(/\/+$/, '');
+const TAVUPAY_KEY = (process.env.TAVUPAY_API_KEY || '').trim();
+const TAVUPAY_SECRET = (process.env.TAVUPAY_API_SECRET || '').trim();
+const TAVUPAY_TIMEOUT = 20000, TAVUPAY_READ_TIMEOUT = 7000;
+function tavupayConfigured() { return !!(TAVUPAY_KEY && TAVUPAY_SECRET); }
+// The address TavuPay posts confirmations to. Normally saved once in the TavuPay dashboard (Merchant Settings / Webhooks); this optional secret
+// (TAVUPAY_CALLBACK_URL, the same secret address) is also sent with each request, which the document requires if none is saved there.
+function tavupayHookUrl() { return String(process.env.TAVUPAY_CALLBACK_URL || '').trim(); }
+// One HTTPS call, forced onto IPv4 (see the whitelist note above). Replaceable in tests.
+let _tavupayHttp = function tavupayHttps(method, urlStr, headers, bodyStr, timeoutMs) {
+  const https = require('node:https');
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const req = https.request({ method, hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers, family: 4, timeout: timeoutMs }, resp => {
+      const chunks = []; let size = 0;
+      resp.on('data', c => { size += c.length; if (size > 1_000_000) { req.destroy(new Error('reply too large')); return; } chunks.push(c); });
+      resp.on('end', () => resolve({ status: resp.statusCode || 0, text: Buffer.concat(chunks).toString('utf8') }));
+      resp.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('timed out')));
+    req.on('error', reject);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+};
+async function _tavupayRequest(path, { method = 'GET', body, timeoutMs } = {}) {
+  if (!tavupayConfigured()) return { ok: false, providerDown: false, notConfigured: true, httpStatus: 0, data: { message: 'TavuPay is not set up on the server yet.' } };
+  const headers = { 'X-API-Key': TAVUPAY_KEY, 'X-API-Secret': TAVUPAY_SECRET, 'Accept': 'application/json' };
+  let bodyStr;
+  if (body) { bodyStr = JSON.stringify(body); headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(bodyStr); }
+  let r;
+  try { r = await _tavupayHttp(method, TAVUPAY_BASE + path, headers, bodyStr, timeoutMs || TAVUPAY_TIMEOUT); }
+  catch (e) { return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } }; }
+  let data;
+  try { data = r.text ? JSON.parse(r.text) : {}; } catch (_) { data = { message: String(r.text || '').slice(0, 300) }; }
+  if (!data || typeof data !== 'object') data = { message: String(data) };
+  const good = r.status >= 200 && r.status < 300;
+  // 5xx, 408 and 429 are the gateway struggling, not a verdict on this payment.
+  const down = !good && (r.status >= 500 || r.status === 408 || r.status === 429);
+  if (good && data.ok === false) return { ok: false, providerDown: false, httpStatus: r.status, data };
+  return { ok: good, providerDown: down, httpStatus: r.status, data };
+}
+// TavuPay's words -> the three this file speaks. INDETERMINATE is "not known yet": never a failure (the docs say check again before retrying).
+const TAVUPAY_OK_WORDS = new Set(['successful', 'succeeded', 'success', 'completed', 'complete', 'paid', 'confirmed']);
+const TAVUPAY_BAD_WORDS = new Set(['failed', 'declined', 'cancelled', 'canceled', 'expired', 'rejected', 'timeout', 'timed_out', 'error']);
+function tavupayStatusLabel(t) {
+  const s = String((t && (t.transactionStatus || t.status)) || '').trim().toLowerCase();
+  if (TAVUPAY_BAD_WORDS.has(s)) return 'failed';
+  if (TAVUPAY_OK_WORDS.has(s)) return 'success';
+  if (!s && t && t.success === true) return 'success';
+  if (s) return 'processing';
+  return '';
+}
+// 8-64 letters, digits, underscores or hyphens (the document's rule): a deposit's own id (24 hex characters) qualifies. Phones go out as '+256...' (pesajetPhone).
+function tavupayIdempotencyKey(depositId) {
+  const k = String(depositId || '');
+  return /^[A-Za-z0-9_-]{8,64}$/.test(k) ? k : '';
+}
+async function tavupayCollect({ amount, phone, description, idempotencyKey, callback }) {
+  const payload = { type: 'collection', phone: pesajetPhone(phone), amount: Math.round(Number(amount)) };
+  const key = tavupayIdempotencyKey(idempotencyKey);
+  if (key) payload.idempotencyKey = key;
+  if (description) payload.description = String(description).slice(0, 200);
+  if (callback && /^https:\/\//i.test(callback)) payload.callback = callback;
+  return _tavupayRequest('/payments', { method: 'POST', body: payload });
+}
+// A payout (type 'disbursement'). The withdrawal's own id is the idempotency key (24 hex characters, inside the 8-64 rule), so a retry of the
+// same withdrawal is the same payout on TavuPay's side. The reply carries TavuPay's own `reference`.
+async function tavupayDisburse({ amount, phone, description, idempotencyKey }) {
+  const payload = { type: 'disbursement', phone: pesajetPhone(phone), amount: Math.round(Number(amount)) };
+  const key = tavupayIdempotencyKey(idempotencyKey);
+  if (key) payload.idempotencyKey = key;
+  if (description) payload.description = String(description).slice(0, 200);
+  return _tavupayRequest('/payments', { method: 'POST', body: payload });
+}
+// What an ADMIN is told when TavuPay refuses a payout (a member never sees this). Unlike a recharge, the admin is the one who can fix a key, a
+// whitelist or an empty balance, so those are named here (the details stay in the log).
+function tavupayPayoutMsg(r) {
+  if (!r || r.notConfigured) return 'TavuPay is not set up on the server yet (TAVUPAY_API_KEY / TAVUPAY_API_SECRET). The withdrawal stays pending and untouched.';
+  if (r.httpStatus === 401 || r.httpStatus === 403) {
+    console.error(`TavuPay refused a payout (HTTP ${r.httpStatus}): ${JSON.stringify(r.data || {}).slice(0, 300)} -- check the API key/secret and that this server's IPv4 is on the TavuPay whitelist`);
+    return 'TavuPay refused the request (check the API key and secret and the IP whitelist in the TavuPay dashboard). The withdrawal stays pending and untouched.';
+  }
+  const d = r.data || {};
+  const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
+  return (raw ? 'TavuPay said: ' + raw.slice(0, 160) + '. ' : 'TavuPay could not send this payout right now. ') + 'The withdrawal stays pending and untouched.';
+}
+// Re-read one payment by TavuPay's own reference. `unavailable` = the gateway would not answer this question (so the caller must NOT conclude
+// anything about the payment); `providerDown` = it is struggling right now.
+async function tavupayGetTx(reference, { attempts = 2 } = {}) {
+  const none = { status: '', amount: NaN, fee: 0, providerDown: false, unavailable: false, reference: reference || null };
+  if (!reference) return { ...none, unavailable: true };
+  let last = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const r = await _tavupayRequest('/payments?reference=' + encodeURIComponent(reference), { timeoutMs: TAVUPAY_READ_TIMEOUT });
+    if (r.ok) {
+      let t = r.data || {};
+      if (t.data && typeof t.data === 'object' && !Array.isArray(t.data)) t = t.data;
+      else if (Array.isArray(t.data)) t = t.data.find(x => x && (x.reference === reference || x.transactionReference === reference)) || {};
+      return { ...none, status: tavupayStatusLabel(t), rawStatus: String(t.status || t.transactionStatus || ''), amount: Number(t.amount), fee: Number(t.fee) || 0, reference: t.reference || reference };
+    }
+    if (!r.providerDown) {
+      if (r.httpStatus === 401 || r.httpStatus === 403) console.error(`TavuPay read refused (HTTP ${r.httpStatus}): ${JSON.stringify(r.data).slice(0, 200)} -- check the API key/secret and that this server's IPv4 is on the TavuPay whitelist`);
+      return { ...none, unavailable: true, httpStatus: r.httpStatus };
+    }
+    last = r;
+    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
+  }
+  return { ...none, providerDown: true, httpStatus: last && last.httpStatus };
+}
+// What a member is told when TavuPay refuses to start a payment. Credential / whitelist problems are the owner's to fix and are logged, never shown.
+function tavupayUserMsg(r, fallback) {
+  if (!r || r.providerDown) return PROVIDER_BUSY_MSG;
+  if (r.notConfigured || r.httpStatus === 401 || r.httpStatus === 403) {
+    console.error(`TavuPay refused the payment request (HTTP ${r.httpStatus || 0}): ${JSON.stringify(r.data || {}).slice(0, 300)} -- check TAVUPAY_API_KEY / TAVUPAY_API_SECRET and the IP whitelist`);
+    return PROVIDER_BUSY_MSG;
+  }
+  const d = r.data || {};
+  const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
+  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway|api key|secret|whitelist/i.test(raw)) return PROVIDER_BUSY_MSG;
+  return raw || fallback || PROVIDER_BUSY_MSG;
+}
+// Does the gateway's figure agree with what we asked for? Equal, or equal once its fee is taken off. No figure reported = the status decides.
+function tavupayAmountOk(dep, reported, fee) {
+  const got = Number(reported);
+  if (!Number.isFinite(got) || got <= 0) return true;
+  const want = Number(dep && dep.amount) || 0;
+  const f = Number(fee) || 0;
+  return Math.abs(got - want) < 0.5 || (f > 0 && Math.abs(got - f - want) < 0.5);
+}
+// Settle one deposit from a result {status, amount, fee}. The wallet is paid OUR stored amount, and only when the figures agree.
+async function tavupayApply(doc, t, source) {
+  const dep = doc.data();
+  if (t.status === 'success') {
+    if (!tavupayAmountOk(dep, t.amount, t.fee)) {
+      console.error(`TAVUPAY AMOUNT MISMATCH dep=${doc.id} asked=${dep.amount} reported=${t.amount} fee=${t.fee} -- parked for review, NOT credited`);
+      await withLock('dep:' + doc.id, async () => {
+        const fresh = await doc.ref.get();
+        if (fresh.exists && ['pending', 'initiating'].includes(fresh.data().status))
+          await doc.ref.update({ status: 'review', reviewReason: `TavuPay reports ${t.amount} for a recharge of ${dep.amount}. Check TavuPay; Force-credit only if the right amount was paid.`, tavupayReported: { amount: Number(t.amount) || 0, fee: Number(t.fee) || 0 } });
+      }).catch(() => {});
+      return 'review';
+    }
+    await creditDeposit(doc, source);
+    return 'success';
+  }
+  if (t.status === 'failed') { await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG); return 'failed'; }
+  return 'pending';
+}
+// ── TavuPay PAYOUTS (withdrawals) ──
+// Same discipline as the PesaJet payout above: the outbound identifier (the withdrawal id, also the idempotency key) is written BEFORE the call,
+// a lost reply leaves the row on 'sending' (never back to pending), acceptance is not completion ('processing' until TavuPay says so), and
+// totalWithdrawn is counted once. Settling comes from the signed `transfer.success` / `transfer.failed` webhook, or from a re-read of the payout.
+//   * A SIGNED webhook proves TavuPay sent it, so it settles by itself. That includes a signed failure for a row still on 'sending': the event
+//     carries our own idempotency key, so TavuPay did receive and refuse that payout and there is nothing ambiguous left to wait for.
+//   * An unsigned (or wrongly signed) webhook is only a hint; the payout is re-read by the reference we stored and only that answer counts. If the
+//     gateway will not answer that question the row simply stays where it is.
+async function tavupayFindWithdrawal(candidates) {
+  for (const c of candidates) {
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
+      const byId = await db.collection('withdrawals').doc(c).get();
+      if (byId.exists && byId.data().tavupayRef === c) return byId;
+    }
+    const q = await db.collection('withdrawals').where('tavupayTxId', '==', c).limit(1).get();
+    if (!q.empty) return q.docs[0];
+  }
+  return null;
+}
+// Settle one payout from a verdict ('success' | 'failed'). `trusted` = the verdict is proven (a signed webhook, or a read of TavuPay itself).
+async function tavupayApplyPayout(doc, label, { trusted, amount } = {}) {
+  const wit = doc.data();
+  if (wit.status !== 'processing' && wit.status !== 'sending') return 'ignored';
+  if (!trusted) return 'hint';
+  if (label === 'success') {
+    const got = Number(amount);
+    if (Number.isFinite(got) && got > 0 && Math.abs(got - Number(wit.net)) >= 0.5)
+      console.error(`TAVUPAY PAYOUT AMOUNT DIFFERS withdrawal=${doc.id} net=${wit.net} reported=${got} -- recorded as paid (the money left); check TavuPay`);
+    if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+    return 'success';
+  }
+  if (label === 'failed') {
+    const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing', 'sending']);
+    if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+    return 'failed';
+  }
+  return 'pending';
+}
+async function tavupayPayoutWebhookWork(wh, verified) {
+  const doc = await tavupayFindWithdrawal(wh.candidates);
+  if (!doc) return;
+  const wit = doc.data();
+  if (wit.status !== 'processing' && wit.status !== 'sending') return;
+  if (verified && (wh.label === 'success' || wh.label === 'failed')) {
+    await tavupayApplyPayout(doc, wh.label, { trusted: true, amount: wh.amount });
+    return;
+  }
+  if (!wit.tavupayTxId) return;                          // nothing of ours to re-read it by: the signed call, the admin's Verify or the reconciler settle it
+  const t = await tavupayGetTx(wit.tavupayTxId);
+  if (t.providerDown || t.unavailable) return;
+  // A read of a payout that is still on 'sending' is not enough to REFUND it (it may not be the same payout); success is always safe to record.
+  if (t.status === 'failed' && wit.status === 'sending') return;
+  await tavupayApplyPayout(doc, t.status, { trusted: true, amount: t.amount });
+}
+async function tavupayPayoutWebhookOpen(wh) {
+  const doc = await tavupayFindWithdrawal(wh.candidates);
+  return !!doc && ['processing', 'sending'].includes(doc.data().status);
+}
+
+// The server watches each TavuPay recharge itself from the moment it is accepted and credits it the moment TavuPay says so, like the PesaJet
+// watcher (same settle path: single-writer locked, so a webhook, this watcher, the member's poll and the reconciler can never credit twice).
+// Gentler than PesaJet's: TavuPay publishes no rate limit, so one question every 2 s per payment and at most 20 payments watched. A gateway that
+// will not answer this question at all ends the watch at once (the webhook and the reconciler remain).
+const TAVUPAY_WATCH_EVERY_MS = 2000, TAVUPAY_WATCH_BUDGET_MS = 120000, TAVUPAY_WATCH_MAX = 20;
+const _tavupayWatchers = new Map();
+function tavupayWatcherFresh(depositId, maxAgeMs = 5000) {
+  const last = _tavupayWatchers.get(depositId);
+  return last !== undefined && Date.now() - last < maxAgeMs;
+}
+function watchTavupayDeposit(depositId) {
+  if (!depositId || _tavupayWatchers.has(depositId) || _tavupayWatchers.size >= TAVUPAY_WATCH_MAX) return;
+  _tavupayWatchers.set(depositId, Date.now());
+  (async () => {
+    try {
+      const began = Date.now();
+      let down = 0;
+      while (Date.now() - began < TAVUPAY_WATCH_BUDGET_MS) {
+        const backoff = down ? Math.min(8000, 1000 * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
+        await new Promise(r => setTimeout(r, TAVUPAY_WATCH_EVERY_MS + backoff));
+        const snap = await db.collection('pendingDeposits').doc(depositId).get();
+        if (!snap.exists) return;
+        const dep = snap.data();
+        if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+        if (!dep.tavupayRef) continue;
+        const t = await tavupayGetTx(dep.tavupayRef, { attempts: 1 });
+        _tavupayWatchers.set(depositId, Date.now());
+        if (t.unavailable) return;
+        if (t.providerDown) { down++; continue; }
+        down = 0;
+        if (t.status === 'success' || t.status === 'failed') { await tavupayApply(snap, t, 'server watcher'); return; }
+      }
+    } catch (e) { console.error('TavuPay watcher (' + depositId + '):', e.message); }
+    finally { _tavupayWatchers.delete(depositId); }
+  })();
+}
+// HMAC-SHA256 (hex) of the RAW request body with the API secret. `verified:false` with reason 'mismatch' means a signature WAS sent and is wrong.
+function tavupayVerifyWebhook(headerSig, rawBody) {
+  if (!TAVUPAY_SECRET) return { verified: false, reason: 'no-secret' };
+  const sig = String(headerSig || '').trim().replace(/^sha256=/i, '').toLowerCase();
+  if (!sig) return { verified: false, reason: 'no-signature' };
+  if (!rawBody || !rawBody.length) return { verified: false, reason: 'no-body' };
+  const exp = crypto.createHmac('sha256', TAVUPAY_SECRET).update(rawBody).digest('hex');
+  const a = Buffer.from(exp, 'utf8'), b = Buffer.from(sig, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? { verified: true, reason: 'ok' } : { verified: false, reason: 'mismatch' };
+}
+// The webhook shape is documented two ways (flat: event, reference, type, amount, phone, status; and nested under `data` with
+// transactionReference / transactionExternalReference), so every place a reference could be is read and each is tried against our own rows.
+function tavupayWebhookFields(body) {
+  const b = (body && typeof body === 'object') ? body : {};
+  const d = (b.data && typeof b.data === 'object') ? b.data : {};
+  const candidates = [];
+  for (const v of [b.reference, d.reference, d.transactionReference, d.transactionExternalReference, b.transactionReference, b.idempotencyKey, d.idempotencyKey, b.externalReference, d.externalReference]) {
+    const x = String(v == null ? '' : v).trim();
+    if (x && x.length <= 80 && !candidates.includes(x)) candidates.push(x);
+  }
+  const event = String(b.event || '').toLowerCase();
+  let label = '';
+  if (/success/.test(event)) label = 'success'; else if (/fail/.test(event)) label = 'failed';
+  else label = tavupayStatusLabel({ status: d.transactionStatus || d.status || b.status, success: d.success !== undefined ? d.success : b.success });
+  const type = String(b.type || d.type || '').toLowerCase();
+  const isPayout = event.startsWith('transfer') || /disburs|transfer|withdraw/.test(type) || /DEBIT/i.test(String(d.transactionEntryGeneralType || ''));
+  return { event, candidates, label, isPayout, amount: Number(d.amount !== undefined ? d.amount : b.amount), fee: Number(d.fee !== undefined ? d.fee : b.fee) || 0 };
+}
+async function tavupayFindDeposit(candidates) {
+  for (const c of candidates) {
+    let q = await db.collection('pendingDeposits').where('tavupayRef', '==', c).limit(1).get();
+    if (q.empty) q = await db.collection('pendingDeposits').where('ref', '==', c).limit(1).get();
+    if (!q.empty && q.docs[0].data().provider === 'tavupay') return q.docs[0];
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(c)) {
+      const byId = await db.collection('pendingDeposits').doc(c).get();
+      if (byId.exists && byId.data().provider === 'tavupay') return byId;
+    }
+  }
+  return null;
+}
+async function tavupayWebhookWork(body, verified) {
+  try {
+    const wh = tavupayWebhookFields(body);
+    if (wh.event === 'ping') return;
+    if (wh.isPayout) { await tavupayPayoutWebhookWork(wh, verified); return; }
+    const doc = await tavupayFindDeposit(wh.candidates);
+    if (!doc) return;
+    const dep = doc.data();
+    if (dep.status !== 'pending' && dep.status !== 'initiating') return;
+    // A SIGNED webhook settles the payment by itself; an unsigned or wrongly signed one is only a hint and the payment is re-read.
+    if (verified && (wh.label === 'success' || wh.label === 'failed')) {
+      await tavupayApply(doc, { status: wh.label, amount: wh.amount, fee: wh.fee }, 'TavuPay webhook');
+      return;
+    }
+    if (!dep.tavupayRef) return;
+    const t = await tavupayGetTx(dep.tavupayRef);
+    if (t.providerDown || t.unavailable) return;     // unverifiable: the member's poll and the reconciler retry
+    await tavupayApply(doc, t, 'TavuPay webhook');
+  } catch (e) { console.error('TavuPay webhook error (already acked):', e.message); }
+}
+async function tavupayWebhookOpen(body) {
+  const wh = tavupayWebhookFields(body);
+  if (wh.isPayout) return tavupayPayoutWebhookOpen(wh);
+  const doc = await tavupayFindDeposit(wh.candidates);
+  return !!doc && ['pending', 'initiating'].includes(doc.data().status);
+}
+
 app.post('/pesajet/webhook', async (req, res) => {
   const body = req.body || {};
   const check = pesajetVerifyWebhook(body, req.get('x-webhook-signature'), req.rawBody);
@@ -6393,6 +6849,18 @@ app.post('/pesajet/webhook', async (req, res) => {
   await pesajetWebhookWork(body, check.verified === true);
   const claimsFinal = /completed|failed|expired/i.test(String(body.event || '')) || ['completed', 'failed', 'expired'].includes(String(body.status || '').toLowerCase());
   retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body, check.verified === true), () => pesajetWebhookOpen(body), claimsFinal);
+});
+// TavuPay webhook (recharges). Answered 202 as the document recommends, before any work. A wrong signature is NOT refused: the document is
+// inconsistent about signing, so a call we cannot verify is simply treated as a hint and the payment is re-read before anything is credited.
+app.post('/tavupay/webhook', async (req, res) => {
+  const body = req.body || {};
+  const check = tavupayVerifyWebhook(req.get('x-tavupay-signature'), req.rawBody);
+  if (check.reason === 'mismatch') console.error('TavuPay webhook: signature did not verify, treated as a hint only.');
+  res.status(202).json({ received: true });
+  const wh = tavupayWebhookFields(body);
+  console.log(`TavuPay webhook: ${wh.event || '?'} ${wh.candidates[0] || '?'}${check.verified ? ' (signed)' : ''}`);
+  await tavupayWebhookWork(body, check.verified);
+  retryCallbackWork('TavuPay webhook', () => tavupayWebhookWork(body, check.verified), () => tavupayWebhookOpen(body), wh.label === 'success' || wh.label === 'failed');
 });
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
@@ -7081,10 +7549,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // automatic GATEWAY now. An already-stored legacy 'manual' value is
     // still read correctly (depositAutomaticProvider()'s own fallback to
     // MarzPay) -- it just can never be WRITTEN again going forward.
-    if ('depositMethod' in updates && !['marzpay', 'pesajet'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'pesajet'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet' or 'manual'` });
+    if ('depositMethod' in updates && !['marzpay', 'pesajet', 'tavupay'].includes(updates.depositMethod))
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'pesajet' or 'tavupay'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'tavupay', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet', 'tavupay' or 'manual'` });
     // The link-preview words: plain text only, trimmed and capped (Telegram shows about this much).
     for (const [key, max] of [['linkPreviewTitle', 70], ['linkPreviewText', 220]]) {
       if (!(key in updates)) continue;
@@ -8480,6 +8948,15 @@ async function payoutRejectGuard(witId, w) {
   const busy = (what) => ({ code: 503, message: `${what} could not be reached to confirm this payout. Try again in a moment.` });
   const live = (what, st) => ({ code: 409, message: `${what} reports this payout as ${st || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
   const FINAL_FAIL = ['failed', 'expired', 'cancelled', 'canceled', 'declined'];
+  if (w.tavupayRef) {
+    // TavuPay may not answer status questions at all (its documents disagree). A final failed answer allows the refund and a live one blocks it.
+    // When the gateway cannot be asked, the owner may still reject after checking the TavuPay dashboard and confirming in the panel.
+    const cannot = { code: 409, needsConfirm: true, message: 'TavuPay cannot confirm this payout from here. Open the TavuPay dashboard and look for it (reference ' + (w.tavupayTxId || w.tavupayRef) + '). Only if it did NOT go out, reject it again and confirm.' };
+    if (!w.tavupayTxId) return confirmedNotSent ? null : cannot;
+    const t = await tavupayGetTx(w.tavupayTxId);
+    if (t.providerDown || t.unavailable || !t.status) return confirmedNotSent ? null : (t.providerDown ? busy('TavuPay') : cannot);
+    return t.status === 'failed' ? null : live('TavuPay', t.rawStatus || t.status);
+  }
   if (w.pesajetTxId || w.pesajetRef) {
     if (w.pesajetTxId) {
       const t = await pesajetGetTx(w.pesajetTxId);
@@ -9790,6 +10267,14 @@ async function reconcilePendingDeposits() {
       // is the outcome that cannot cost anybody money.
       if (hit.complete) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
+    // TavuPay's pending deposits: re-read each by its TavuPay reference. A gateway that will not answer the question leaves the row alone.
+    const tvSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'tavupay').orderBy('createdAt', 'asc').limit(50).get();
+    await inChunks(tvSnap.docs.filter(d => d.data().tavupayRef), 5, async (doc) => {
+      const t = await tavupayGetTx(doc.data().tavupayRef);
+      if (t.providerDown || t.unavailable) return;
+      const out = await tavupayApply(doc, t, 'reconciler');
+      if (out === 'success') settled++;
+    });
     // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
     // itself failed after status already claimed the credit) never show up
     // in the 'pending' scan above -- retry them here every tick regardless
@@ -9919,6 +10404,20 @@ async function reconcilePendingWithdrawals() {
       } else if (realStatus === 'failed') {
         const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
         if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+        settled++;
+      }
+    }
+    // TavuPay payouts that were accepted ('processing', with TavuPay's reference). Its status endpoint may not exist, in which case the first
+    // refusal ends the loop for this tick and the signed webhook remains the way a payout is finished. 'sending' rows are never touched here.
+    const tvSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('tavupayTxId', '>', '').orderBy('createdAt', 'asc').limit(20).get();
+    for (const doc of tvSnap.docs) {
+      const wit = doc.data();
+      if (!wit.tavupayTxId) continue;
+      const t = await tavupayGetTx(wit.tavupayTxId, { attempts: 1 });
+      if (t.unavailable) break;
+      if (t.providerDown) continue;
+      if (t.status === 'success' || t.status === 'failed') {
+        await tavupayApplyPayout(doc, t.status, { trusted: true, amount: t.amount });
         settled++;
       }
     }
@@ -10111,6 +10610,8 @@ async function parkLostMarzDeposits() {
   for (const doc of snap.docs) {
     const d = doc.data();
     if (d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
+    // A TavuPay row that has its reference is still being settled by the webhook / reconciler; it is parked only after 6 hours.
+    if (d.provider === 'tavupay' && d.tavupayRef && Date.now() - tsMillis(d.createdAt) < 6 * 3600 * 1000) continue;
     // PesaJet rows are looked up by the reconciler for 6 hours; after that no lookup can see them any more, so they are parked too.
     if (d.provider === 'pesajet' && Date.now() - tsMillis(d.createdAt) < PESAJET_LOST_WINDOW_MS + 10 * 60 * 1000) continue;
     await withLock('dep:' + doc.id, async () => {

@@ -36,6 +36,7 @@ if grep -q "^DONE\." /tmp/personalcare.hook-update.log; then
   else URL="https://$HOST/k7x2/h-$TOKEN/pesajet"; fi
   echo; echo "Paste this into PesaJet as the webhook URL (keep it private; do not post it or screenshot it):"; echo
   echo "    $URL"; echo
+  echo "For TavuPay use the same address but ending in /tavupay instead of /pesajet:"; echo; echo "    ${URL%/pesajet}/tavupay"; echo
   code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' "https://$HOST/k7x2/pesajet/webhook" || true); echo "check: the old public address answers HTTP $code (expected 404)"
 else
   echo "The update did not finish. Last lines:"; tail -12 /tmp/personalcare.hook-update.log

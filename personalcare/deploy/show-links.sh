@@ -5,6 +5,7 @@
 #   bash /srv/personalcare-src/personalcare/deploy/show-links.sh admin      the hidden admin address
 #   bash /srv/personalcare-src/personalcare/deploy/show-links.sh github     GitHub webhook: Payload URL, content type and Secret
 #   bash /srv/personalcare-src/personalcare/deploy/show-links.sh pesajet    PesaJet webhook URL
+#   bash /srv/personalcare-src/personalcare/deploy/show-links.sh tavupay    TavuPay webhook URL
 # The secret and the PesaJet address are private: do not post or screenshot them.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,8 +53,19 @@ pesajet() {
     echo "  For a secret address instead, run:  bash $PERSONALCARE/deploy/make-hook-url.sh"
   fi
 }
+tavupay() {
+  local T HH
+  T=$(rd "${PERSONALCARE_HOOK_FILE:-$SECRETS/hook-token}"); HH=$(rd "${PERSONALCARE_HOOK_HOST_FILE:-$SECRETS/hook-host}")
+  if [ -n "$T" ]; then
+    if [ -n "$HH" ]; then echo "TavuPay webhook URL: https://$HH/h-$T/tavupay"; else echo "TavuPay webhook URL: https://$APP/k7x2/h-$T/tavupay"; fi
+    echo "  Save it in TavuPay: Dashboard > Developers > Webhooks (All payment events, Active) and API Keys > Merchant Settings (callback URL)."
+  else
+    echo "TavuPay webhook URL (the plain one): https://$APP/k7x2/tavupay/webhook"
+    echo "  For a secret address instead, run:  bash $PERSONALCARE/deploy/make-hook-url.sh"
+  fi
+}
 case "$want" in
-  app) app ;; admin) admin ;; github) github ;; pesajet) pesajet ;;
-  all) app; admin; echo; github; echo; pesajet ;;
-  *) echo "usage: show-links.sh [app|admin|github|pesajet|all]"; exit 1 ;;
+  app) app ;; admin) admin ;; github) github ;; pesajet) pesajet ;; tavupay) tavupay ;;
+  all) app; admin; echo; github; echo; pesajet; echo; tavupay ;;
+  *) echo "usage: show-links.sh [app|admin|github|pesajet|tavupay|all]"; exit 1 ;;
 esac
