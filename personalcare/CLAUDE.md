@@ -122,3 +122,4 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
 
 
 - Airtel prefixes on the deposit page: 70 / 75 / 74 / 73 / 20 (it picks Airtel by itself for a 073 number and sends the stored network, which PesaJet obeys). A gateway's "unsupported network" answer reaches the member as a plain sentence (`UNSUPPORTED_NETWORK_MSG`), never the raw code. Member cache `personalcare-shell-v436`.
+- Link preview card (Telegram): only the title, text and picture typed/uploaded in Admin > Pictures are shown. There is no built-in sentence any more (blank text = no description line); a blank title falls back to the app name and a missing picture to the app icon. Admin cache `personalcare-admin-shell-v158`.

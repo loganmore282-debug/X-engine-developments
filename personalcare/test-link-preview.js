@@ -83,11 +83,11 @@ function setup(settings,customImage){
   return call;
 }
 (async()=>{
-  // defaults: the brand name, the standard sentence, the app icon as the picture
+  // defaults: the brand name as the title, NO built-in sentence, the app icon as the picture
   let call=setup({brandName:'PersonalCare'});
   let r=await call('/public/link-preview-page');
   assert.match(r.body,/<meta property="og:title" content="PersonalCare">/);
-  assert.match(r.body,/<meta property="og:description" content="Join the PersonalCare App as a distributor and easily earn money using just your mobile phone\. You can withdraw your earnings daily and earn generous commissions by inviting friends">/);
+  assert.ok(!/og:description|twitter:description|name="description"|Join the/.test(r.body),'no built-in sentence: with no text typed, no description is shown');
   assert.match(r.body,/<meta property="og:image" content="https:\/\/app\.example\.com\/k7x2\/public\/link-preview-image\?v=stock-abc">/);
   assert.match(r.body,/<meta name="twitter:card" content="summary">/,'a small square picture at the right');
   assert.match(r.headers['Content-Type'],/text\/html/);

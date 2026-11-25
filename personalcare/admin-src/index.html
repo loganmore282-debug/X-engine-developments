@@ -2969,7 +2969,7 @@ async function renderBanners(){
       <label>Title <span class="muted">(up to 70 characters)</span></label>
       <input id="lpTitle" maxlength="70" value="${esc(v('linkPreviewTitle'))}" placeholder="${esc(v('brandName','PersonalCare'))}">
       <label>Text <span class="muted">(up to 220 characters)</span></label>
-      <textarea id="lpText" maxlength="220" rows="4" placeholder="Join the ${esc(v('brandName','PersonalCare'))} App as a distributor and easily earn money using just your mobile phone. You can withdraw your earnings daily and earn generous commissions by inviting friends">${esc(v('linkPreviewText'))}</textarea>
+      <textarea id="lpText" maxlength="220" rows="4" placeholder="Type the words members should see under the title">${esc(v('linkPreviewText'))}</textarea>
       <button class="btn sm" id="saveLinkPreview" style="margin-top:8px">Save title and text</button>
       <div class="banner-row" style="margin-top:14px">
         ${linkPreviewImage?`<img class="img-thumb" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3" style="aspect-ratio:1/1;object-fit:cover">`:'<div class="img-thumb" style="opacity:.25"></div>'}

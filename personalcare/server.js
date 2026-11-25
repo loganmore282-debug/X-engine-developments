@@ -3855,17 +3855,16 @@ app.get('/public/link-preview-page', async (req, res) => {
     const sett = await getSettings();
     const brand = brandName(sett);
     const title = String(sett.linkPreviewTitle || '').trim() || brand;
-    const text = String(sett.linkPreviewText || '').trim() || `Join the ${brand} App as a distributor and easily earn money using just your mobile phone. You can withdraw your earnings daily and earn generous commissions by inviting friends`;
+    const text = String(sett.linkPreviewText || '').trim();   // only what the owner typed: no built-in sentence
     const img = await linkPreviewImage();
     const origin = `${req.protocol}://${req.get('host')}`;
     const imageUrl = img ? `${origin}/${PUBLIC_API_PREFIX}/public/link-preview-image?v=${encodeURIComponent(img.version)}` : '';
     res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
     res.send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>${htmlText(title)}</title>
-<meta name="description" content="${htmlText(text)}">
-<meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
-<meta property="og:title" content="${htmlText(title)}"><meta property="og:description" content="${htmlText(text)}">
-${imageUrl ? `<meta property="og:image" content="${htmlText(imageUrl)}"><meta property="og:image:width" content="512"><meta property="og:image:height" content="512">\n` : ''}<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${htmlText(title)}"><meta name="twitter:description" content="${htmlText(text)}">
+${text ? `<meta name="description" content="${htmlText(text)}">\n` : ''}<meta property="og:type" content="website"><meta property="og:site_name" content="${htmlText(brand)}">
+<meta property="og:title" content="${htmlText(title)}">${text ? `<meta property="og:description" content="${htmlText(text)}">` : ''}
+${imageUrl ? `<meta property="og:image" content="${htmlText(imageUrl)}"><meta property="og:image:width" content="512"><meta property="og:image:height" content="512">\n` : ''}<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${htmlText(title)}">${text ? `<meta name="twitter:description" content="${htmlText(text)}">` : ''}
 ${imageUrl ? `<meta name="twitter:image" content="${htmlText(imageUrl)}">\n` : ''}</head><body></body></html>`);
   } catch (e) { res.status(500).end(); }
 });
